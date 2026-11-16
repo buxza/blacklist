@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ SPOTÓW (25 / 50 / >50 KM)
+   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ ASFALTOWYCH SPOTÓW RWD
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -224,7 +224,7 @@ async function askLocationOnStart(){
   );
 }
 
-/* ===== OBLICZANIE POWIERZCHNI Z BOUNDING BOX (LEKKIE, BEZ ERROR 502) ===== */
+/* ===== OBLICZANIE POWIERZCHNI Z BOUNDING BOX ===== */
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371e3, toRad = d => d * Math.PI / 180;
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
@@ -239,7 +239,6 @@ function calcBoundsArea(bounds){
   const midLon = (minlon + maxlon) / 2;
   const height = haversine(minlat, midLon, maxlat, midLon);
   const width = haversine(midLat, minlon, midLat, maxlon);
-  // Współczynnik wypełnienia ~0.65 dla prostokąta otaczającego nieregularny wielokąt
   return height * width * 0.65;
 }
 
@@ -248,8 +247,8 @@ function formatDist(m){
   return (m/1000).toFixed(1) + ' km';
 }
 
-// Czarna lista słów oznaczających duży przypał (markety, centra, urzędy, osiedla)
-const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln/i;
+// Czarna lista słów oznaczających działające obiekty, markety, urzędy, osiedla
+const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln|port lotniczy|lotnisko cywilne|aeroklub|wojskow|jednostk/i;
 
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -262,7 +261,7 @@ async function fetchOverpassWithFallback(query){
   for(const url of OVERPASS_ENDPOINTS){
     try{
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 16000);
+      const timer = setTimeout(() => ctrl.abort(), 18000);
       const res = await fetch(url, {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -284,18 +283,33 @@ async function fetchOverpassWithFallback(query){
 
 async function findNearbyPlacards(lat, lon, radiusKm = 25){
   const radius = Math.round(radiusKm * 1000);
-  // Używamy lekkiego "out bb center tags;" zamiast ciężkiego "out geom;" -> brak błędu 502!
+  // Zapytanie w 2 krokach w Overpass:
+  // 1) Szuka wyłącznie asfaltowych/utwardzonych placów, opuszczonych obiektów, placów manewrowych i stref przemysłowych (bez działających lotnisk i szutru).
+  // 2) Odejmuje wszystkie spoty, które leżą w promieniu 450 m od wiosek, osiedli lub domów mieszkalnych!
   const query = `
-[out:json][timeout:18];
+[out:json][timeout:20];
 (
-  way["amenity"="parking"](around:${radius},${lat},${lon});
-  way["amenity"="driver_training"](around:${radius},${lat},${lon});
-  way["leisure"="track"](around:${radius},${lat},${lon});
-  way["aeroway"~"runway|apron"](around:${radius},${lat},${lon});
-  way["landuse"="industrial"](around:${radius},${lat},${lon});
-  way["landuse"="quarry"](around:${radius},${lat},${lon});
-);
-out bb center tags;
+  way["amenity"="parking"]["surface"="asphalt"](around:${radius},${lat},${lon});
+  way["amenity"="driver_training"]["surface"!~"gravel|dirt|sand|grass|unpaved"](around:${radius},${lat},${lon});
+  way["landuse"="industrial"]["surface"="asphalt"](around:${radius},${lat},${lon});
+  way["abandoned:amenity"="parking"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
+  way["disused:amenity"="parking"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
+  way["abandoned:aeroway"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
+  way["disused:aeroway"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
+  way["abandoned:landuse"="industrial"](around:${radius},${lat},${lon});
+  way["highway"="turning_circle"]["surface"="asphalt"](around:${radius},${lat},${lon});
+)->.candidates;
+
+(
+  way["landuse"="residential"](around:450, .candidates);
+  way["building"~"^(house|residential|apartments|detached|farm)$"](around:350, .candidates);
+  node["place"~"^(village|hamlet|town|city|suburb)$"](around:650, .candidates);
+)->.populated;
+
+way.candidates(around:450, .populated)->.near_homes;
+(.candidates; - .near_homes;)->.isolated;
+
+.isolated out bb center tags;
 `;
   const data = await fetchOverpassWithFallback(query);
   const elements = data.elements || [];
@@ -304,14 +318,29 @@ out bb center tags;
   const seen = new Set();
 
   for(const el of elements){
-    const area = calcBoundsArea(el.bounds);
-    if(area < 1000 || area > 650000) continue;
-
     const tags = el.tags || {};
-    const rawName = (tags.name || '') + ' ' + (tags.operator || '') + ' ' + (tags.description || '');
 
+    // Odrzucamy cokolwiek z nieasfaltową/nieutwardzoną nawierzchnią
+    if(tags.surface && !['asphalt', 'paved'].includes(tags.surface)) continue;
+
+    // Odrzucamy działające lotniska i czynne obiekty lotnicze
+    if(tags.aeroway && !tags['abandoned:aeroway'] && !tags['disused:aeroway']) continue;
+
+    const area = calcBoundsArea(el.bounds);
+    // Wystarczy 450 m² (np. 21x21 m — w sam raz żeby zakręcić bączka RWD) aż do 350 000 m²
+    if(area < 450 || area > 350000) continue;
+
+    const rawName = (tags.name || '') + ' ' + (tags.operator || '') + ' ' + (tags.description || '');
     if(PRZYPAL_REGEX.test(rawName)) continue;
-    if(tags.access === 'customers' || tags.access === 'private' || tags.access === 'no') continue;
+
+    // Pozwalamy na abandoned/disused, ale odrzucamy aktywne prywatne/płatne/dla klientów
+    const isAbandoned = Boolean(
+      tags['abandoned:amenity'] || tags['disused:amenity'] ||
+      tags['abandoned:aeroway'] || tags['disused:aeroway'] ||
+      tags['abandoned:landuse'] || tags.abandoned === 'yes' || tags.disused === 'yes'
+    );
+
+    if(!isAbandoned && (tags.access === 'customers' || tags.access === 'private' || tags.access === 'no')) continue;
     if(tags.fee === 'yes') continue;
     if(tags.parking && ['multi-storey', 'underground', 'street_side', 'lane'].includes(tags.parking)) continue;
 
@@ -325,67 +354,47 @@ out bb center tags;
     if(seen.has(key)) continue;
     seen.add(key);
 
-    const surfaceMap = {
-      asphalt: 'Asfalt',
-      concrete: 'Beton',
-      paved: 'Utwardzony',
-      paving_stones: 'Kostka',
-      gravel: 'Szuter',
-      dirt: 'Ziemia/Szuter',
-      sand: 'Piasek'
-    };
-    const surface = surfaceMap[tags.surface] || 'Utwardzony / brak danych';
+    let stealth = 12; // Bazowo wysoko, bo już odfiltrowaliśmy wioski i domy w promieniu 450-650m!
+    let vibeNote = 'Asfalt na odludziu · Z dala od wiosek';
+    let typeLabel = 'Asfaltowy plac na uboczu';
 
-    let stealth = 0;
-    let vibeNote = 'Ustronny plac';
-    let typeLabel = 'Plac / Parking na uboczu';
-
-    if(tags.leisure === 'track'){
-      stealth += 25;
-      typeLabel = '🏁 Tor / Obiekt moto';
-      vibeNote = 'Legalny klimat · Zero sąsiadów';
-    } else if(tags.aeroway){
+    if(isAbandoned){
       stealth += 22;
-      typeLabel = '✈️ Stary pas / Płyta lotniskowa';
-      vibeNote = 'Otwarta przestrzeń · Daleko od domów';
+      typeLabel = '🏚️ Opuszczony plac / Obiekt';
+      vibeNote = 'Opuszczony asfalt · Zero ruchu i sąsiadów';
     } else if(tags.amenity === 'driver_training'){
-      stealth += 18;
-      typeLabel = '🎯 Plac manewrowy';
-      vibeNote = 'Stworzony do kręcenia';
-    } else if(tags.landuse === 'quarry'){
       stealth += 16;
-      typeLabel = '🪨 Żwirownia / Wyrobisko';
-      vibeNote = 'Totalne odludzie · Szuter';
+      typeLabel = '🎯 Asfaltowy plac manewrowy';
+      vibeNote = 'Równy asfalt · Stworzony pod bączki';
     } else if(tags.landuse === 'industrial'){
       stealth += 14;
-      typeLabel = '🏭 Baza / Teren przemysłowy';
-      vibeNote = 'Po godzinach pusto · Brak mieszkańców';
-    } else {
-      stealth += 6;
-      if(tags.parking === 'forest' || tags.forestry){
-        stealth += 12;
-        typeLabel = '🌲 Leśny plac / Parking';
-        vibeNote = 'W lesie · Daleko od zabudowań';
-      }
+      typeLabel = '🏭 Strefa przemysłowa (asfalt)';
+      vibeNote = 'Na uboczu · Po godzinach pusto';
+    } else if(tags.highway === 'turning_circle'){
+      stealth += 12;
+      typeLabel = '🔄 Asfaltowa pętla / Zawrotka';
+      vibeNote = 'Ślepy koniec drogi · Ciasny plac na bączka';
+    } else if(tags.parking === 'forest' || tags.forestry){
+      stealth += 18;
+      typeLabel = '🌲 Leśny plac asfaltowy';
+      vibeNote = 'W głębi lasu · Daleko od zabudowań';
     }
 
+    // Brak nazwy i operatora = brak ochrony i brak ruchu komercyjnego
     if(!tags.name && !tags.operator){
       stealth += 8;
-      if(vibeNote === 'Ustronny plac') vibeNote = 'Bezimienny plac · Brak ochrony';
     }
 
-    if(area >= 2500 && area <= 35000) stealth += 4;
+    // Idealny rozmiar pod bączki RWD (600 m² – 15 000 m²)
+    if(area >= 600 && area <= 15000) stealth += 5;
 
     const name = tags.name || tags['name:pl'] || tags.operator || typeLabel;
     const dist = haversine(lat, lon, c.lat, c.lon);
 
-    let stealthBadge = '🟡 ŚREDNI PRZYPAŁ';
-    let stealthColor = '#FFD400';
-    if(stealth >= 20){
-      stealthBadge = '🟢 ZERO PRZYPAŁU';
-      stealthColor = '#39FF14';
-    } else if(stealth >= 13){
-      stealthBadge = '🟢 NISKI PRZYPAŁ';
+    let stealthBadge = '🟢 NISKI PRZYPAŁ';
+    let stealthColor = '#39FF14';
+    if(stealth >= 26){
+      stealthBadge = '🟢 TOTALNE ODLUDZIE';
       stealthColor = '#39FF14';
     }
 
@@ -396,7 +405,7 @@ out bb center tags;
       lon: c.lon,
       dist,
       area: Math.round(area),
-      surface,
+      surface: 'Asfalt',
       stealth,
       stealthBadge,
       stealthColor,
@@ -411,7 +420,7 @@ out bb center tags;
     return scoreB - scoreA;
   });
 
-  return places.slice(0, 8);
+  return places.slice(0, 10);
 }
 
 let tk = 0;
@@ -536,7 +545,7 @@ intro:()=>{
         </span>
       </div>
       <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS na start, aby wyszukiwać <b>bezprzypałowe miejscówki (25 km / +25 km / >50 km)</b> oraz mierzyć prędkość <b>AI Speed Run</b>.
+        Włącz GPS na start, aby wyszukiwać <b>asfaltowe, opuszczone spoty na odludziu</b> (z dala od wiosek) oraz mierzyć prędkość <b>AI Speed Run</b>.
       </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       
@@ -570,8 +579,8 @@ ${prof()}
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
 <button class="btn cy" onclick="requestPermissionsAndStart('crew', false)">CREW BATTLE<small>2–4 graczy</small></button>
 <button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
-  🥷 ZNAJDŹ BEZPRZYPAŁOWY PLAC ${S.places.length ? `(${S.places.length} ZAPISANE)` : ''}
-  <small>Szukaj w promieniu 25 km z opcją +25 km oraz >50 km</small>
+  🥷 ZNAJDŹ ASFALT NA BĄCZKA ${S.places.length ? `(${S.places.length} ZAPISANE)` : ''}
+  <small>Opuszczone place z dala od wiosek (25 km / +25 km / &gt;50 km)</small>
 </button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
@@ -647,14 +656,14 @@ places:()=>{
   return `
   <div class=top>
     <button class=x onclick="A.go('home')">‹</button>
-    <h2 style="font-size:24px;margin:0;flex:1">🥷 MIEJSCÓWKI</h2>
+    <h2 style="font-size:22px;margin:0;flex:1">🥷 SPOTY RWD</h2>
     ${S.places.length ? `<button class=x style="width:auto;padding:0 10px;color:#FF1744;box-shadow:inset 0 0 0 1.5px #FF1744;font-size:11px" onclick="A.clearPlaces()">WYCZYŚĆ</button>` : ''}
   </div>
   ${rangeBar}
   ${S.placesLoading ? `
     <div class=fr style="text-align:center;padding:24px 16px">
-      <b class=or style="font-size:20px">Skanuję promień ${S.placesRadius} km...</b>
-      <p style="color:#9aa;margin-top:8px;font-size:12px">Dopisywanie nowych ustronnych spotów bez usuwania zapisanych...</p>
+      <b class=or style="font-size:20px">Szukam asfaltu na odludziu (${S.placesRadius} km)...</b>
+      <p style="color:#9aa;margin-top:8px;font-size:12px">Odrzucam wioski, domy, szuter i czynne lotniska. Stare spoty zostają na liście...</p>
     </div>
   ` : ''}
   ${S.placesError ? `
@@ -666,7 +675,7 @@ places:()=>{
   ` : ''}
   ${!S.places.length && !S.placesLoading ? `
     <div class=fr>
-      <p style="color:#9aa;font-size:13px">Brak zapisanych spotów w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej, aby poszerzyć zasięg.</p>
+      <p style="color:#9aa;font-size:13px">Brak zapisanych asfaltowych spotów na odludziu w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej.</p>
     </div>
   ` : ''}
   ${S.places.map((p,i)=>`
@@ -681,7 +690,7 @@ places:()=>{
         <small style="color:#ddd;margin:0">${esc(p.vibeNote)}</small>
       </div>
       <small style="color:#889;margin:4px 0 8px;display:block">
-        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · ${esc(p.surface)}
+        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · <b style="color:#00F0FF">ASFALT</b>
       </small>
       <div class=pills>
         <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
@@ -773,7 +782,6 @@ const A = {
     S.placesRadius = radiusKm;
     S.placesLoading = true;
     S.placesError = null;
-    // NIE usuwamy S.places — dotychczasowe miejsca zostają na ekranie podczas skanowania!
     A.go('places');
 
     if(!navigator.geolocation){
@@ -784,7 +792,6 @@ const A = {
     }
 
     try{
-      // Jeśli mamy świeżą pozycję z ostatnich 2 minut, użyj jej od razu bez czekania
       if(!S.userLat || !S.userLon){
         const pos = await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -800,10 +807,8 @@ const A = {
 
       const freshList = await findNearbyPlacards(S.userLat, S.userLon, radiusKm);
 
-      // Scalanie nowych miejsc z dotychczas zapisanymi (bez usuwania starych i bez duplikatów)
       const mapById = new Map();
       S.places.forEach(p => {
-        // Aktualizuj dystans względem obecnej pozycji
         p.dist = haversine(S.userLat, S.userLon, p.lat, p.lon);
         mapById.set(p.id, p);
       });
