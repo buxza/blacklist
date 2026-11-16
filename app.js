@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY I GPS
+   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ PLACÓW
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -85,8 +85,6 @@ const CATS={
 /* ===== BANK ZADAŃ ===== */
 function buildTaskBank(){
   const bank = {burn:[],drift:[],speed:[],precision:[],reverse:[],sound:[],duel:[],legend:[]};
-  const mods = ["bez zgaszenia silnika","z włączonymi światłami awaryjnymi","przy wyłączonym radiu","z okrzykiem ksywy na starcie","bez patrzenia w obrotomierz"];
-  const judges = ["Ekipa ocenia 1–10 (min. 7 zalicza).","Sędzią jest gracz po prawej."];
 
   [3,4,5,6,7,8,9,10,12,15].forEach(s=>{
     bank.burn.push({t:`[AI KAMERA] Burnout: utrzymaj ciągły dym z opon przez min. ${s} s.`,d:s>8?3:2,s:s+5,ai:'cam_smoke',goal:s});
@@ -100,7 +98,7 @@ function buildTaskBank(){
   [40,50,60,70,80].forEach(spd=>{
     bank.speed.push({t:`[AI GPS] Rozpędź auto do ${spd} km/h i wyhamuj w strefie.`,d:spd>60?3:2,s:25,ai:'gps_speed',goal:spd});
   });
-  // Wypełnienie pozostałych zadań bazowych dla kategorii
+
   Object.keys(bank).forEach(cat=>{
     while(bank[cat].length < 115){
       const i = bank[cat].length + 1;
@@ -111,9 +109,7 @@ function buildTaskBank(){
 }
 
 const TASK_BANK = buildTaskBank();
-const TOTAL_TASKS = Object.values(TASK_BANK).reduce((a,b)=>a+b.length,0);
 
-let lastT=null, lastC=null;
 function pick(cats, maxD, aiOnly=false){
   const seen = new Set(LS.g('bl_seen',[]));
   let pool = [];
@@ -161,8 +157,70 @@ let S = {
   placesLoading: false,
   placesError: null,
   userLat: null,
-  userLon: null
+  userLon: null,
+  gpsPermState: 'prompt', // 'prompt' | 'granted' | 'denied' | 'requesting'
+  gpsMsg: ''
 };
+
+/* ===== SPRAWDZANIE UPRAWNIEŃ GPS NA START ===== */
+async function checkInitialGpsPermission(){
+  if(!navigator.geolocation){
+    S.gpsPermState = 'denied';
+    S.gpsMsg = 'Twoja przeglądarka nie obsługuje modułu GPS.';
+    if(S.scr === 'intro') render();
+    return;
+  }
+  if(navigator.permissions && navigator.permissions.query){
+    try{
+      const status = await navigator.permissions.query({name: 'geolocation'});
+      S.gpsPermState = status.state; // 'granted', 'prompt', 'denied'
+      if(status.state === 'granted'){
+        S.gpsMsg = 'Lokalizacja jest już aktywna. Możesz wjeżdżać!';
+      } else if(status.state === 'denied'){
+        S.gpsMsg = 'Dostęp do GPS jest zablokowany w ustawieniach przeglądarki.';
+      }
+      status.onchange = () => {
+        S.gpsPermState = status.state;
+        if(S.scr === 'intro') render();
+      };
+      if(S.scr === 'intro') render();
+    }catch(e){}
+  }
+}
+
+async function askLocationOnStart(){
+  if(!navigator.geolocation){
+    S.gpsPermState = 'denied';
+    S.gpsMsg = 'Brak wsparcia GPS w tym urządzeniu.';
+    render();
+    return;
+  }
+  S.gpsPermState = 'requesting';
+  S.gpsMsg = 'Zatwierdź pytanie o lokalizację w oknie przeglądarki...';
+  render();
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      S.userLat = pos.coords.latitude;
+      S.userLon = pos.coords.longitude;
+      S.gpsPermState = 'granted';
+      S.gpsMsg = '✅ GPS połączony! Wjeżdżamy do garażu...';
+      beep(880, 0.15);
+      vib(60);
+      render();
+      setTimeout(() => A.go('home'), 650);
+    },
+    (err) => {
+      S.gpsPermState = err.code === 1 ? 'denied' : 'prompt';
+      S.gpsMsg = err.code === 1
+        ? '⚠️ Odrzucono dostęp. Włącz GPS w ustawieniach strony (ikona kłódki obok adresu) lub wejdź bez lokalizacji.'
+        : '⚠️ Nie udało się złapać sygnału GPS. Możesz spróbować ponownie lub wejść bez lokalizacji.';
+      beep(220, 0.2);
+      render();
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+  );
+}
 
 /* ===== SZUKANIE DUŻYCH PLACÓW (Overpass / OSM) ===== */
 function haversine(lat1, lon1, lat2, lon2){
@@ -178,8 +236,6 @@ function formatDist(m){
 }
 
 async function findNearbyPlacards(lat, lon, radiusKm = 20){
-  // Szukamy dużych parkingów, terenów przemysłowych, pustych placów
-  // Preferujemy większe i bardziej oddalone od centrum (mniej uczęszczane)
   const radius = Math.round(radiusKm * 1000);
   const query = `
 [out:json][timeout:25];
@@ -217,13 +273,12 @@ out center tags;
       (tags.amenity === 'parking' ? 'Parking' : 
        tags.landuse === 'industrial' ? 'Teren przemysłowy' : 'Otwarty plac');
 
-    // Preferuj większe (jeśli mamy surface/area info) i mniej "centrum-like"
     let score = 0;
     if(tags.amenity === 'parking') score += 2;
-    if(tags.landuse === 'industrial') score += 3; // często mniej uczęszczane
+    if(tags.landuse === 'industrial') score += 3;
     if(tags.access === 'private' || tags.access === 'customers') score += 1;
     if(tags.parking === 'surface' || tags.parking === 'multi-storey') score += 1;
-    if(!tags.name) score += 1; // bez nazwy = mniej znany
+    if(!tags.name) score += 1;
 
     const dist = haversine(lat, lon, c.lat, c.lon);
     places.push({
@@ -238,10 +293,9 @@ out center tags;
     });
   }
 
-  // Sortuj: najpierw odległość, potem lekko preferuj industrial / bez nazwy
   places.sort((a,b) => {
     const dDiff = a.dist - b.dist;
-    if(Math.abs(dDiff) > 800) return dDiff; // wyraźna różnica dystansu
+    if(Math.abs(dDiff) > 800) return dDiff;
     return (b.score - a.score) || dDiff;
   });
 
@@ -294,21 +348,17 @@ async function loadVideos(){
   }catch(e){ S.videos = []; }
 }
 
-/* ===== ŻĄDANIE UPRAWNIEŃ KAMERY I GPS NA START ===== */
+/* ===== ŻĄDANIE UPRAWNIEŃ KAMERY I GPS PRZY TRYBACH ===== */
 async function requestPermissionsAndStart(mode, aiOnly){
-  // 1. Zapytaj o kamerę
-  try{
-    const camStream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
-    camStream.getTracks().forEach(t=>t.stop());
-  }catch(e){
-    console.log('Kamera odrzucona lub niedostępna');
+  if(aiOnly){
+    try{
+      const camStream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+      camStream.getTracks().forEach(t=>t.stop());
+    }catch(e){}
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(()=>{}, ()=>{}, {timeout:5000});
+    }
   }
-
-  // 2. Zapytaj o GPS
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(()=>{}, ()=>{}, {timeout:5000});
-  }
-
   A.setupReal(mode, aiOnly);
 }
 
@@ -354,14 +404,47 @@ const tmHTML=()=>{
 const tm=()=>{const e=$('#tm');if(e)e.innerHTML=tmHTML()};
 
 const V={
-intro:()=>`
-<div class=c>
-  ${LOGO}
-  <div class=wm>BLACKLIST</div>
-  <div class=sub>UPALANIE · DRIFT · AI VISION · GPS</div>
-  <p class=q>„${S.mot}”</p>
-  <button class="btn on" style="max-width:340px" onclick="A.go('home')">WCHODZĘ<small>Biorę odpowiedzialność na siebie</small></button>
-</div>`,
+intro:()=>{
+  const isGranted = S.gpsPermState === 'granted';
+  const isReq = S.gpsPermState === 'requesting';
+  return `
+  <div class=c>
+    ${LOGO}
+    <div class=wm>BLACKLIST</div>
+    <div class=sub>UPALANIE · DRIFT · AI VISION · GPS</div>
+    <p class=q>„${S.mot}”</p>
+
+    <div class="fr" style="--c:${isGranted ? '#39FF14' : '#00F0FF'};text-align:left;width:100%;max-width:380px;margin:10px 0 14px">
+      <div class="row" style="margin-bottom:6px">
+        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">
+          📍 DOSTĘP DO LOKALIZACJI (GPS)
+        </b>
+        <span class="tag" style="background:${isGranted ? '#39FF14' : '#00F0FF'}">
+          ${isGranted ? 'AKTYWNY' : 'WYMAGANY DO MAP'}
+        </span>
+      </div>
+      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
+        Włącz GPS na start, aby odblokować <b>wyszukiwarkę pustych placów</b> w Twojej okolicy oraz pomiary prędkości <b>AI Speed Run</b>.
+      </p>
+      ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
+      
+      ${isGranted ? `
+        <button class="btn gr on" style="margin:4px 0 0" onclick="A.go('home')">
+          WCHODZĘ DO GARAŻU
+          <small>GPS aktywny · Biorę odpowiedzialność na siebie</small>
+        </button>
+      ` : `
+        <button class="btn cy on" style="margin:4px 0 8px" ${isReq ? 'disabled' : ''} onclick="askLocationOnStart()">
+          ${isReq ? '⏳ OCZEKIWANIE NA ZGODĘ...' : '📍 UDOSTĘPNIJ LOKALIZACJĘ I WEJDŹ'}
+          <small>Kliknij „Zezwól” w oknie przeglądarki</small>
+        </button>
+        <button class="btn w" style="margin:0;opacity:.8;font-size:12px;padding:9px" onclick="A.go('home')">
+          POMIŃ I WEJDŹ BEZ GPS →
+        </button>
+      `}
+    </div>
+  </div>`;
+},
 
 home:()=>`
 <div style="text-align:center;padding-top:4px">${LOGO}<div class=wm>BLACKLIST</div><div class=sub>UPALANIE · DRIFT · AI · GPS</div></div>
@@ -372,9 +455,12 @@ ${prof()}
   <button onclick="A.openRank()">🏆 RANKING</button>
 </div>
 <button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
-<button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS (WYMAGA UPRAWNIEŃ)<small>Weryfikacja kamerą i lokalizacją</small></button>
+<button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
 <button class="btn cy" onclick="requestPermissionsAndStart('crew', false)">CREW BATTLE<small>2–4 graczy</small></button>
-<button class="btn w" onclick="A.findPlaces()" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">📍 ZNAJDŹ PLAC<small>Top 5 dużych / odludnych miejsc w okolicy</small></button>
+<button class="btn w" onclick="A.findPlaces()" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
+  📍 ZNAJDŹ PLAC ${S.gpsPermState==='granted' ? '(GPS GOTOWY)' : ''}
+  <small>Top 5 dużych / odludnych miejsc w okolicy</small>
+</button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
   <button style="color:#FF1744" onclick="A.go('admin')">🛡️ ADMIN</button>
@@ -417,7 +503,15 @@ rank:()=>`
 
 settings:()=>`
 <div class=top><button class=x onclick="A.go('home')">‹</button><h2>⚙️ USTAWIENIA</h2></div>
-<div class=fr><input class=up id="s-nick" value="${esc(S.nick)}"><button class="btn cy" onclick="A.saveNick()">ZAPISZ KSYWĘ</button></div>`,
+<div class=fr>
+  <input class=up id="s-nick" value="${esc(S.nick)}">
+  <button class="btn cy" onclick="A.saveNick()">ZAPISZ KSYWĘ</button>
+</div>
+<div class=fr style="--c:#39FF14">
+  <b style="color:#39FF14">📍 STATUS GPS: ${S.gpsPermState.toUpperCase()}</b>
+  <p style="font-size:12px;color:#9aa;margin:6px 0">Jeśli GPS był odrzucony, kliknij przycisk poniżej, aby ponowić prośbę.</p>
+  <button class="btn gr" onclick="askLocationOnStart()">🔄 ODNÓW DOSTĘP DO LOKALIZACJI</button>
+</div>`,
 
 admin:()=>`
 <div class=top><button class=x onclick="A.go('home')">‹</button><h2>🛡️ ADMIN</h2></div>
@@ -437,7 +531,7 @@ places:()=>{
     return `
     <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 PLACE</h2></div>
     <div class=fr>
-      <b style="color:#FF1744">Błąd</b>
+      <b style="color:#FF1744">Błąd lokalizacji</b>
       <p style="margin:8px 0;color:#ccc">${esc(S.placesError)}</p>
       <button class="btn cy" onclick="A.findPlaces()">SPRÓBUJ PONOWNIE</button>
     </div>`;
@@ -564,6 +658,7 @@ const A = {
       });
       S.userLat = pos.coords.latitude;
       S.userLon = pos.coords.longitude;
+      S.gpsPermState = 'granted';
 
       const list = await findNearbyPlacards(S.userLat, S.userLon, 22);
       S.places = list;
@@ -571,7 +666,7 @@ const A = {
       render();
     }catch(e){
       S.placesLoading = false;
-      S.placesError = e.code === 1 ? 'Odrzucono dostęp do lokalizacji.' :
+      S.placesError = e.code === 1 ? 'Odrzucono dostęp do lokalizacji. Zezwól na GPS w ustawieniach przeglądarki.' :
                       e.code === 2 ? 'Nie udało się ustalić pozycji.' :
                       e.code === 3 ? 'Timeout GPS – spróbuj ponownie.' :
                       (e.message || 'Nie udało się pobrać listy miejsc.');
@@ -600,5 +695,6 @@ function renderAIHud(){
   if(tb) tb.querySelectorAll('i').forEach((b,i)=>b.classList.toggle('on', (i+1)/24 <= S.aiProgress));
 }
 
+checkInitialGpsPermission();
 syncUserLeaderboard();
 render();
