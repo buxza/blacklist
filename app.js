@@ -156,8 +156,97 @@ let S = {
   aiStatus: 'GOTOWY DO SKANOWANIA',
   aiProgress: 0,
   aiMetric: '0.0',
-  aiActive: false
+  aiActive: false,
+  places: [],
+  placesLoading: false,
+  placesError: null,
+  userLat: null,
+  userLon: null
 };
+
+/* ===== SZUKANIE DUŻYCH PLACÓW (Overpass / OSM) ===== */
+function haversine(lat1, lon1, lat2, lon2){
+  const R = 6371e3, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function formatDist(m){
+  if(m < 1000) return Math.round(m) + ' m';
+  return (m/1000).toFixed(1) + ' km';
+}
+
+async function findNearbyPlacards(lat, lon, radiusKm = 20){
+  // Szukamy dużych parkingów, terenów przemysłowych, pustych placów
+  // Preferujemy większe i bardziej oddalone od centrum (mniej uczęszczane)
+  const radius = Math.round(radiusKm * 1000);
+  const query = `
+[out:json][timeout:25];
+(
+  way["amenity"="parking"](around:${radius},${lat},${lon});
+  relation["amenity"="parking"](around:${radius},${lat},${lon});
+  way["landuse"="industrial"](around:${radius},${lat},${lon});
+  way["landuse"="commercial"]["name"~"parking|park|plac|lot",i](around:${radius},${lat},${lon});
+  way["highway"="service"]["service"="parking_aisle"](around:${radius},${lat},${lon});
+);
+out center tags;
+`;
+  const url = 'https://overpass-api.de/api/interpreter';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'data=' + encodeURIComponent(query)
+  });
+  if(!res.ok) throw new Error('Overpass error ' + res.status);
+  const data = await res.json();
+  const elements = data.elements || [];
+
+  const places = [];
+  const seen = new Set();
+
+  for(const el of elements){
+    const c = el.center || (el.lat && el.lon ? {lat: el.lat, lon: el.lon} : null);
+    if(!c) continue;
+    const key = c.lat.toFixed(4) + ',' + c.lon.toFixed(4);
+    if(seen.has(key)) continue;
+    seen.add(key);
+
+    const tags = el.tags || {};
+    const name = tags.name || tags['name:pl'] || tags.operator || 
+      (tags.amenity === 'parking' ? 'Parking' : 
+       tags.landuse === 'industrial' ? 'Teren przemysłowy' : 'Otwarty plac');
+
+    // Preferuj większe (jeśli mamy surface/area info) i mniej "centrum-like"
+    let score = 0;
+    if(tags.amenity === 'parking') score += 2;
+    if(tags.landuse === 'industrial') score += 3; // często mniej uczęszczane
+    if(tags.access === 'private' || tags.access === 'customers') score += 1;
+    if(tags.parking === 'surface' || tags.parking === 'multi-storey') score += 1;
+    if(!tags.name) score += 1; // bez nazwy = mniej znany
+
+    const dist = haversine(lat, lon, c.lat, c.lon);
+    places.push({
+      id: el.type + '/' + el.id,
+      name,
+      lat: c.lat,
+      lon: c.lon,
+      dist,
+      score,
+      type: tags.amenity || tags.landuse || 'place',
+      tags
+    });
+  }
+
+  // Sortuj: najpierw odległość, potem lekko preferuj industrial / bez nazwy
+  places.sort((a,b) => {
+    const dDiff = a.dist - b.dist;
+    if(Math.abs(dDiff) > 800) return dDiff; // wyraźna różnica dystansu
+    return (b.score - a.score) || dDiff;
+  });
+
+  return places.slice(0, 5);
+}
 
 let tk = 0;
 let aiCleanup = null;
@@ -285,6 +374,7 @@ ${prof()}
 <button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS (WYMAGA UPRAWNIEŃ)<small>Weryfikacja kamerą i lokalizacją</small></button>
 <button class="btn cy" onclick="requestPermissionsAndStart('crew', false)">CREW BATTLE<small>2–4 graczy</small></button>
+<button class="btn w" onclick="A.findPlaces()" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">📍 ZNAJDŹ PLAC<small>Top 5 dużych / odludnych miejsc w okolicy</small></button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
   <button style="color:#FF1744" onclick="A.go('admin')">🛡️ ADMIN</button>
@@ -332,7 +422,54 @@ settings:()=>`
 admin:()=>`
 <div class=top><button class=x onclick="A.go('home')">‹</button><h2>🛡️ ADMIN</h2></div>
 ${!S.isAdmin?`<div class=fr><input class=up id="adm-u" placeholder="LOGIN"><input type="password" id="adm-p" placeholder="HASŁO"><button class="btn red" onclick="A.loginAdmin()">ZALOGUJ</button></div>`:`<div class=fr><b style="color:#39FF14">ZALOGOWANY</b><button class="btn red" onclick="A.logoutAdmin()">WYLOGUJ</button></div>`}
-`
+`,
+
+places:()=>{
+  if(S.placesLoading){
+    return `
+    <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 SZUKAM PLACÓW</h2></div>
+    <div class=fr style="text-align:center;padding:30px 16px">
+      <b class=or style="font-size:22px">Skanuję okolicę...</b>
+      <p style="color:#9aa;margin-top:10px;font-size:13px">Szukam dużych parkingów i odludnych terenów w promieniu ~20 km</p>
+    </div>`;
+  }
+  if(S.placesError){
+    return `
+    <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 PLACE</h2></div>
+    <div class=fr>
+      <b style="color:#FF1744">Błąd</b>
+      <p style="margin:8px 0;color:#ccc">${esc(S.placesError)}</p>
+      <button class="btn cy" onclick="A.findPlaces()">SPRÓBUJ PONOWNIE</button>
+    </div>`;
+  }
+  if(!S.places.length){
+    return `
+    <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 PLACE</h2></div>
+    <div class=fr>
+      <p style="color:#9aa">Nic nie znaleziono w okolicy. Spróbuj w innym miejscu lub zwiększ zasięg.</p>
+      <button class="btn cy" onclick="A.findPlaces()">SZUKAJ PONOWNIE</button>
+    </div>`;
+  }
+  return `
+  <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 TOP 5 PLACÓW</h2></div>
+  <p style="color:#9aa;font-size:12px;margin:4px 0 10px">Najbliższe duże / mniej uczęszczane miejsca</p>
+  ${S.places.map((p,i)=>`
+    <div class=fr style="padding:12px 14px">
+      <div class=row>
+        <b style="color:#39FF14">#${i+1}</b>
+        <span style="font:700 14px sans-serif;flex:1;margin:0 8px">${esc(p.name)}</span>
+        <em style="color:#00F0FF">${formatDist(p.dist)}</em>
+      </div>
+      <small style="color:#778;margin:4px 0 8px;display:block">${p.type === 'industrial' ? 'Teren przemysłowy' : p.type === 'parking' ? 'Parking' : 'Otwarty teren'}</small>
+      <div class=pills>
+        <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
+        <button onclick="A.copyCoords(${p.lat},${p.lon})" style="flex:1">📋 KOPIUJ</button>
+      </div>
+    </div>
+  `).join('')}
+  <button class="btn cy" onclick="A.findPlaces()" style="margin-top:8px">🔄 ODŚWIEŻ LISTĘ</button>
+  `;
+}
 };
 
 function render(){ $('#app').innerHTML = V[S.scr](); }
@@ -343,6 +480,7 @@ const fl=(t,ok)=>{
 
 const A = {
   go(s){ stopAI(); S.scr=s; render(); window.scrollTo(0,0); },
+  exit(){ stopAI(); A.go('home'); },
   setupReal(m, aiOnly){ S.mode=m; S.aiOnly=aiOnly; A.go('setup'); },
   start(){
     S.card = pick(S.cats, tier(L()), S.aiOnly);
@@ -401,7 +539,59 @@ const A = {
   },
   saveNick(){ S.nick=$('#s-nick').value.toUpperCase(); LS.s('bl_nick', S.nick); A.go('home'); },
   loginAdmin(){ if($('#adm-u').value==ADMIN_CRED.user && $('#adm-p').value==ADMIN_CRED.pass){ S.isAdmin=true; render(); } else alert('Błędne hasło'); },
-  logoutAdmin(){ S.isAdmin=false; render(); }
+  logoutAdmin(){ S.isAdmin=false; render(); },
+
+  async findPlaces(){
+    S.placesLoading = true;
+    S.placesError = null;
+    S.places = [];
+    A.go('places');
+
+    if(!navigator.geolocation){
+      S.placesLoading = false;
+      S.placesError = 'Brak wsparcia GPS w tej przeglądarce.';
+      render();
+      return;
+    }
+
+    try{
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 60000
+        });
+      });
+      S.userLat = pos.coords.latitude;
+      S.userLon = pos.coords.longitude;
+
+      const list = await findNearbyPlacards(S.userLat, S.userLon, 22);
+      S.places = list;
+      S.placesLoading = false;
+      render();
+    }catch(e){
+      S.placesLoading = false;
+      S.placesError = e.code === 1 ? 'Odrzucono dostęp do lokalizacji.' :
+                      e.code === 2 ? 'Nie udało się ustalić pozycji.' :
+                      e.code === 3 ? 'Timeout GPS – spróbuj ponownie.' :
+                      (e.message || 'Nie udało się pobrać listy miejsc.');
+      render();
+    }
+  },
+
+  openMaps(lat, lon){
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`;
+    window.open(url, '_blank');
+  },
+
+  copyCoords(lat, lon){
+    const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(text).then(()=>fl('SKOPIOWANO', true)).catch(()=>prompt('Skopiuj współrzędne:', text));
+    } else {
+      prompt('Skopiuj współrzędne:', text);
+    }
+  }
 };
 
 function renderAIHud(){
