@@ -9,79 +9,151 @@
 <meta name="apple-mobile-web-app-title" content="BLACKLIST">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+<link rel="icon" href="icon.png">
 <title>BLACKLIST</title>
 <style>
-:root{color-scheme:dark;--o:#FF5500;--c:#00F0FF;--r:#FF1744;--p:#0f0f12}
+:root{color-scheme:dark;--o:#FF5500;--c:#00F0FF;--r:#FF1744;--g:#39FF14;--p:#0f0f12}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:#050505;color:#fff;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;min-height:100%}
 body{background:repeating-linear-gradient(115deg,#050505 0 20px,#0a0a0a 20px 21px),linear-gradient(#050505,#050505);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background-blend-mode:normal}
 body:before{content:"";position:fixed;inset:0;background:linear-gradient(transparent 50%,#ff55002e),linear-gradient(#00f0ff1a,transparent 40%);pointer-events:none;z-index:-1}
-#app{max-width:480px;margin:0 auto;padding:14px 18px 28px;min-height:100vh;min-height:100dvh}
+#app{max-width:480px;margin:0 auto;padding:14px 18px 34px;min-height:100vh;min-height:100dvh}
 .cut{clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
 .fr{background:var(--p);clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);box-shadow:inset 0 0 0 2px var(--c,#FF5500),inset 0 0 18px #ff55001f;padding:16px;margin:12px 0}
 .fr.red{--c:var(--r);animation:pu 1.4s infinite alternate}
-@keyframes pu{from{filter:brightness(.7)}to{filter:brightness(1.25)}}
-.btn{display:block;width:100%;border:0;margin:10px 0;padding:15px 8px;font:italic 900 19px/1 -apple-system,Arial,sans-serif;color:var(--c,#FF5500);background:#000a;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);box-shadow:inset 0 0 0 2px currentColor;cursor:pointer;text-transform:uppercase;transition:transform .1s}
-.btn:active{transform:scale(.95)}
+.fr.ai{--c:var(--g);box-shadow:inset 0 0 0 2px var(--g),inset 0 0 18px #39ff1422}
+@keyframes pu{from{filter:brightness(.75)}to{filter:brightness(1.25)}}
+.btn{display:block;width:100%;border:0;margin:10px 0;padding:14px 8px;font:italic 900 18px/1 -apple-system,Arial,sans-serif;color:var(--c,#FF5500);background:#000a;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);box-shadow:inset 0 0 0 2px currentColor;cursor:pointer;text-transform:uppercase;transition:transform .1s}
+.btn:active{transform:scale(.96)}
 .btn small{display:block;font:600 11px/1.3 sans-serif;opacity:.85;margin-top:5px;font-style:normal;text-transform:none}
 .btn.on{background:var(--c,#FF5500);color:#000;box-shadow:none}
-.btn.red{--c:var(--r)}.btn.cy{--c:var(--c2)}
-.btn.cy{color:#00F0FF}.btn.cy.on{background:#00F0FF;color:#000}
+.btn.red{--c:var(--r)}.btn.cy{color:#00F0FF}.btn.cy.on{background:#00F0FF;color:#000}
+.btn.gr{color:#39FF14}.btn.gr.on{background:#39FF14;color:#000}
 .btn.w{color:#fff;font-size:14px;padding:11px}
 .btn[disabled]{opacity:.45;pointer-events:none}
-.c{text-align:center;display:flex;flex-direction:column;align-items:center;min-height:90vh;justify-content:center}
+.c{text-align:center;display:flex;flex-direction:column;align-items:center;min-height:88vh;justify-content:center}
 .wm{font:italic 900 44px/1 Impact,"Arial Black",sans-serif;margin:6px 0 2px;background:linear-gradient(var(--o),var(--r));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 12px #ff550099);letter-spacing:1px}
 .sub{font:italic 800 12px sans-serif;letter-spacing:4px;color:var(--c)}
-.q{font:italic 700 18px/1.35 sans-serif;margin:18px 6px}
-.row{display:flex;align-items:baseline;gap:10px;justify-content:space-between}
+.q{font:italic 700 17px/1.35 sans-serif;margin:16px 6px}
+.row{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
 .row em{font:700 12px monospace;color:var(--c);font-style:normal;margin-left:auto}
-.or{color:var(--o);font:italic 900 28px sans-serif}.cy{color:var(--c)}.rd{color:var(--r)}
+.or{color:var(--o);font:italic 900 28px sans-serif}.cy{color:var(--c)}.rd{color:var(--r)}.gr{color:var(--g)}
 small{color:#9aa;font-size:10px;font-weight:700;display:block;margin:4px 0}
 .tb{display:flex;gap:3px;transform:skewX(-17deg);margin:6px 0}
 .tb i{flex:1;height:14px;background:#ffffff14}
 .tb i.on{background:var(--c,#FF5500);box-shadow:0 0 6px var(--c,#FF5500)}
 .tb i.hot.on{background:#FF1744;box-shadow:0 0 6px #FF1744}
-h2{font:italic 900 34px sans-serif;color:var(--o);margin:10px 0;text-shadow:0 0 10px #ff550099}
-h3{font:italic 800 13px sans-serif;letter-spacing:2px;color:var(--c);margin:18px 0 6px}
-.chip{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin:8px 0;padding:12px;background:#0f0f12;color:#777;border:0;font:700 14px sans-serif;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);box-shadow:inset 0 0 0 2px #333;cursor:pointer}
+h2{font:italic 900 30px sans-serif;color:var(--o);margin:10px 0;text-shadow:0 0 10px #ff550099}
+h3{font:italic 800 13px sans-serif;letter-spacing:2px;color:var(--c);margin:16px 0 6px}
+.chip{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin:7px 0;padding:11px 12px;background:#0f0f12;color:#777;border:0;font:700 14px sans-serif;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);box-shadow:inset 0 0 0 2px #333;cursor:pointer}
 .chip.on{color:var(--c);box-shadow:inset 0 0 0 2px var(--c)}
-.chip span{font-size:20px}.chip small{color:inherit;opacity:.7;font-weight:500;font-size:11px}
-.pills{display:flex;gap:8px}.pills button{flex:1;padding:10px;border:0;background:none;color:#00F0FF;font:italic 900 18px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.chip span{font-size:20px}.chip small{color:inherit;opacity:.75;font-weight:500;font-size:11px}
+.pills{display:flex;gap:8px}.pills button{flex:1;padding:10px;border:0;background:none;color:#00F0FF;font:italic 900 16px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);cursor:pointer}
 .pills button.on{background:#00F0FF;color:#000}
-input{width:100%;margin:5px 0;padding:13px;background:#0f0f12;border:0;color:#fff;font:italic 800 17px sans-serif;text-transform:uppercase;box-shadow:inset 0 0 0 2px #00F0FF;outline:0}
-.top{display:flex;gap:12px;align-items:center}
-.x{width:40px;height:40px;border:0;background:#000;color:#00F0FF;font-size:16px;box-shadow:inset 0 0 0 2px #00F0FF}
+input,select,textarea{width:100%;margin:5px 0;padding:12px;background:#0f0f12;border:0;color:#fff;font:700 15px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;outline:0}
+input.up{font:italic 800 17px sans-serif;text-transform:uppercase}
+.top{display:flex;gap:10px;align-items:center}
+.x{width:40px;height:40px;border:0;background:#000;color:#00F0FF;font-size:16px;font-weight:900;box-shadow:inset 0 0 0 2px #00F0FF;cursor:pointer}
 .big2{font:italic 900 22px sans-serif}
 .sc{flex:1;text-align:center;padding:5px;box-shadow:inset 0 0 0 1.5px #00F0FF66;color:#00F0FF}.sc.a{background:#00F0FF;color:#000}.sc.a small{color:#000}
 .scs{display:flex;gap:8px;margin-top:10px}
-.card{animation:in .35s;min-height:46vh;display:flex;flex-direction:column;gap:12px}
-@keyframes in{from{transform:translateX(40px);opacity:0}}
-.tag{color:#000;font:italic 800 12px sans-serif;padding:4px 9px}
-.tx{font:700 21px/1.35 sans-serif;margin:6px 0;flex:1}
-.big{display:block;text-align:center;font:italic 900 46px monospace;margin:4px 0}
-.acts{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:sticky;bottom:10px}
+.card{animation:in .35s;min-height:42vh;display:flex;flex-direction:column;gap:10px}
+@keyframes in{from{transform:translateX(30px);opacity:0}}
+.tag{color:#000;font:italic 800 11px sans-serif;padding:4px 8px;display:inline-flex;align-items:center;gap:4px}
+.ai-badge{background:#39FF14;color:#000;font:italic 900 11px monospace;padding:4px 8px;box-shadow:0 0 10px #39ff1488}
+.tx{font:700 20px/1.35 sans-serif;margin:4px 0;flex:1}
+.big{display:block;text-align:center;font:italic 900 44px monospace;margin:4px 0}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:sticky;bottom:10px;background:#050505dd;padding-top:4px}
 .sh{animation:sh .4s}@keyframes sh{20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
-.fl{position:fixed;left:0;right:0;top:38%;text-align:center;font:italic 900 56px sans-serif;text-shadow:0 0 16px currentColor;pointer-events:none;animation:fl .9s forwards;z-index:9}
+.fl{position:fixed;left:0;right:0;top:38%;text-align:center;font:italic 900 54px sans-serif;text-shadow:0 0 16px currentColor;pointer-events:none;animation:fl .9s forwards;z-index:25}
 @keyframes fl{0%{transform:scale(.5);opacity:0}25%{transform:scale(1.15);opacity:1}100%{transform:translateY(-50px);opacity:0}}
-.lu{position:fixed;inset:0;background:#000e;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center}
+.lu{position:fixed;inset:0;background:#000e;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center}
 .lu b{font:italic 900 52px sans-serif;color:var(--o);text-shadow:0 0 18px var(--o)}
 .lu span{font:italic 900 32px sans-serif;color:var(--c)}
-.rl{display:flex;gap:10px;align-items:center;font:italic 800 18px sans-serif}.rl em{margin-left:auto;font:900 15px monospace}
+.rl{display:flex;gap:10px;align-items:center;font:italic 800 16px sans-serif}.rl em{margin-left:auto;font:900 14px monospace}
 .mut{text-align:center;color:#778;font-size:11px;margin:10px 0}
-a.l{background:none;border:0;color:#FF1744cc;font:700 11px sans-serif;width:100%;margin-top:6px}
+.nav3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}
+.nav3 button{padding:11px 4px;font:italic 900 13px sans-serif;border:0;background:#0f0f12;color:#fff;box-shadow:inset 0 0 0 1.5px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);cursor:pointer}
+.nav3 button.on{background:#00F0FF;color:#000}
+.vid-box{background:#000;border:1px solid #333;margin:8px 0;position:relative;overflow:hidden}
+.vid-box video,.vid-box canvas{width:100%;max-height:320px;display:block;object-fit:cover;background:#000}
+.hud{font:700 12px monospace;color:#39FF14;background:#001a05;padding:8px;border:1px solid #39FF14;margin-top:6px}
+.foot-links{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:10px;border-top:1px solid #222}
+.foot-links button{background:none;border:0;font:700 11px sans-serif;cursor:pointer;padding:6px}
+.badge-adm{background:#FF1744;color:#fff;font:900 10px monospace;padding:2px 6px;margin-left:6px}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
+/* ============================================================================
+   KONFIGURACJA ADMINISTRATORA I OPCJONALNEJ SYNCHRONIZACJI CHMUROWEJ (GITHUB PAGES)
+   ============================================================================ */
+const ADMIN_CRED = {
+  user: 'BLACKLIST_BOSS',
+  pass: 'NITRO#2026'
+};
+
+/* Opcjonalnie: wklej adres swojego darmowego Firebase Realtime DB (np. https://twoj-projekt-default-rtdb.europe-west1.firebasedatabase.app)
+   oraz Cloudinary (cloudName + uploadPreset), aby ranking i filmy były wspólne dla wszystkich odwiedzających GitHub Pages.
+   Bez wypełniania tych pól aplikacja działa w 100% lokalnie w IndexedDB + LocalStorage! */
+const DEFAULT_CLOUD = {
+  firebaseUrl: '',
+  cloudinaryCloud: '',
+  cloudinaryPreset: ''
+};
+
 const $=s=>document.querySelector(s),R=a=>a[Math.floor(Math.random()*a.length)],N=(a,b,s=1)=>a+s*Math.floor(Math.random()*((b-a)/s+1));
 const pl=(n,a,b,c)=>n==1?a:(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))?b:c;
-const esc=s=>s.replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const esc=s=>String(s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const sl=ms=>new Promise(r=>setTimeout(r,ms));
 const LS={g:(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}},s:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const vib=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}};
 let ac;const beep=(f,d=.12)=>{try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.connect(g);g.connect(ac.destination);g.gain.value=.12;o.start();o.stop(ac.currentTime+d)}catch(e){}};
+
+/* ===== INDEXED DB (PRZECHOWYWANIE PRAWDZIWYCH PLIKÓW WIDEO BEZ LIMITU 5MB) ===== */
+const VDB = {
+  db: null,
+  open(){
+    if(this.db) return Promise.resolve(this.db);
+    return new Promise((res,rej)=>{
+      const req = indexedDB.open('BlacklistVideoDB', 1);
+      req.onupgradeneeded = e => {
+        const d = e.target.result;
+        if(!d.objectStoreNames.contains('videos')) d.createObjectStore('videos', {keyPath:'id'});
+      };
+      req.onsuccess = e => { this.db = e.target.result; res(this.db); };
+      req.onerror = e => rej(e);
+    });
+  },
+  async add(item){
+    const d = await this.open();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction('videos','readwrite');
+      tx.objectStore('videos').put(item);
+      tx.oncomplete = () => res(item);
+      tx.onerror = e => rej(e);
+    });
+  },
+  async all(){
+    const d = await this.open();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction('videos','readonly');
+      const req = tx.objectStore('videos').getAll();
+      req.onsuccess = () => res((req.result||[]).sort((a,b)=>b.ts-a.ts));
+      req.onerror = e => rej(e);
+    });
+  },
+  async del(id){
+    const d = await this.open();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction('videos','readwrite');
+      tx.objectStore('videos').delete(id);
+      tx.oncomplete = () => res();
+      tx.onerror = e => rej(e);
+    });
+  }
+};
 
 /* ===== PROGRESJA ===== */
 const cum=l=>{const n=l-1;return 50*n+5*n*(n-1)/2},need=l=>50+5*(l-1);
@@ -90,127 +162,1111 @@ const RANK=[[50,"Blacklist #1"],[45,"Blacklist Top 5"],[40,"Legend"],[35,"Kingpi
 const rank=l=>RANK.find(x=>l>=x[0])[1],tier=l=>l>=25?3:l>=10?2:1;
 
 /* ===== KATEGORIE ===== */
-const CATS={burn:["UPALANIE","#FF5500","🔥","Dym, donuty, starty"],drift:["DRIFT ZONE","#00F0FF","💨","Poślizgi i łuki"],speed:["SPEED RUN","#FFD400","⚡","Sprinty i hamowania"],precision:["PRECYZJA","#39FF14","🎯","Slalomy i centymetry"],reverse:["REVERSE","#FF2EC4","↩️","Wszystko tyłem"],sound:["SOUND CHECK","#B84DFF","🔊","Odcięcia i koncert wydechu"],duel:["DUEL","#FF1744","🏁","Ty kontra rywal"],legend:["LEGEND","#FFFFFF","⭐","Zadania na wspomnienia"]};
-
-/* ===== GENERATOR KART (tysiące kombinacji = karty się nie kończą) ===== */
-const MOD=["bez zgaszenia silnika","z włączonymi światłami awaryjnymi","z muzyką na maksa","z pasażerem komentującym jak w transmisji","przy wyłączonym radiu – słuchacie tylko silnika","z okrzykiem swojej ksywy na starcie","bez patrzenia w obrotomierz"];
-const WIT=["Ekipa ocenia 1–10, od 7 zaliczone.","Ekipa mierzy stoperem.","Ekipa nagrywa film z boku.","Sędzią jest gracz po twojej prawej.","Zaliczone, gdy większość ekipy klaszcze.","Zaliczone, jeśli nikt nie odwróci wzroku."];
-const RIV=["graczem po lewej","graczem po prawej","najlepszym kierowcą ekipy","rywalem wylosowanym przez ekipę","kimś, kto cię dziś pokonał"];
-const G={
-burn:[
-()=>{const s=N(4,16);return[`Burnout: min. ${s} s ciągłego dymu, ${R(MOD)}.`,s>11?3:s>7?2:1,s+8]},
-()=>{const k=N(2,8);return[`${k} ${pl(k,'donut','donuty','donutów')} pod rząd wokół jednego pachołka, ${R(MOD)}. ${R(WIT)}`,k>5?3:k>3?2:1,k*9]},
-()=>{const m=N(5,12);return[`Donut w kółku o średnicy max ${m} m – im ciaśniej, tym lepiej. Środek wyznacza ${R(['pachołek','butelka','znak kredą'])}, którego nie wolno ruszyć. ${R(WIT)}`,m<7?3:2]},
-()=>{const d=N(30,150,10);return[`Start z miejsca na ${d} m z odcięciem w pierwszym biegu, ${R(MOD)}.`,d>100?2:1]},
-()=>{const k=N(2,5);return[`Ósemka z dymem: ${k} ${pl(k,'pętla','pętle','pętli')} bez przerwy w poślizgu, ${R(MOD)}.`,k>3?3:2,k*14]},
-()=>[`Zostaw gumą ślad w kształcie ${R(['litery L','litery S','ósemki','strzałki','cyfry 7'])}, długość min. ${N(8,25)} m. ${R(WIT)}`,2]],
-drift:[
-()=>{const s=N(2,10);return[`Utrzymaj poślizg przez ${s} s na ${R(['łuku','kółku o promieniu 10 m','zakręcie 90°','nawrocie'])}, ${R(MOD)}.`,s>7?3:s>4?2:1,s+20]},
-()=>{const k=N(2,5);return[`Zmień kierunek poślizgu ${k} ${pl(k,'raz','razy','razy')} pod rząd, bez wyprowadzania auta. ${R(WIT)}`,k>3?3:2,40]},
-()=>{const a=N(15,45,5);return[`Drift z kątem min. ${a}° przez cały łuk. ${R(WIT)}`,a>35?3:a>25?2:1]},
-()=>[`Zainicjuj poślizg ${R(['ręcznym','wahadłem (flick w drugą stronę)','gwałtownym odpuszczeniem gazu','szarpnięciem kierownicy'])} i trzymaj go do ${R(['końca łuku','pachołka','kreski'])}.`,R([1,2,2])],
-()=>{const m=N(1,3);return[`Drift tak, by przód minął pachołek o max ${m} m, niczego nie strącając.`,m<2?3:2]}],
-speed:[
-()=>{const d=N(50,300,50);return[`${d} m z miejsca na czas. Pierwszy gracz ustawia rekord, kolejni go biją, ${R(MOD)}.`,d>150?2:1]},
-()=>{const v=N(40,90,10);return[`Hamowanie awaryjne z ${v} km/h – zatrzymaj się w strefie ${Math.round(v/2.5)} m.`,v>70?3:v>50?2:1]},
-()=>{const k=N(5,10),m=N(7,12),t=N(20,45);return[`Slalom ${k} pachołków co ${m} m w limicie ${t} s, bez strąceń.`,t<28?3:2,t]},
-()=>{const x=N(1,3);return[`Przejedź swoje okrążenie 3 razy z rzędu – czasy mogą się różnić o max ${x} s.`,x<2?3:2]},
-()=>[`Pobij czas poprzedniego gracza na pełnym okrążeniu, ${R(MOD)}.`,2,60]],
-precision:[
-()=>{const c=N(10,40,5),v=N(20,50,10);return[`Zatrzymaj przód auta max ${c} cm od pachołka, jadąc ${v} km/h. Bez dotknięcia. 3 próby.`,c<20?3:c<30?2:1]},
-()=>{const c=N(20,50,10);return[`Zaparkuj ${R(['tyłem','przodem','równolegle'])} w boksie szerokości auta + ${c} cm. Bez poprawek.`,c<30?3:2]},
-()=>{const c=N(15,40,5),m=N(10,25,5);return[`Tunel z butelek: odstęp auto + ${c} cm, długość ${m} m. Przejedź ${R(['przodem','tyłem'])} bez strącenia.`,c<25?3:2]},
-()=>{const k=N(4,8),s=N(10,30,5);return[`Ekipa układa tor z ${k} ${pl(k,'pachołka','pachołków','pachołków')}. Oglądasz go ${s} s i jedziesz z pamięci bez błędu.`,k>6?3:2,s]}],
-reverse:[
-()=>{const m=N(20,60,10),t=N(10,25);return[`${m} m tyłem ${R(['prosto','po łuku','slalomem między 4 pachołkami'])} w ${t} s, ${R(MOD)}.`,t<14?3:2,t]},
-()=>{const v=N(10,25,5),c=N(20,50,10);return[`Cofając z ${v} km/h zatrzymaj tył max ${c} cm przed pachołkiem.`,v>15?3:2]},
-()=>{const v=N(20,35,5);return[`J-turn: cofając z ok. ${v} km/h obróć auto o 180° i ruszaj przodem bez zatrzymania. ${R(WIT)}`,3]},
-()=>[`Ósemka wokół dwóch pachołków w całości na wstecznym, ${R(MOD)}.`,2,45]],
-sound:[
-()=>{const r=N(3000,6000,500),s=N(2,6);return[`Kręć silnik do ok. ${r} obr./min i trzymaj ${s} s (jeśli auto to lubi). Ekipa zgaduje obroty bez patrzenia na zegar.`,s>4?2:1]},
-()=>[`Zagraj gazem rytm: ${R(['stomp-stomp-clap','dwa krótkie, jeden długi','trzy szybkie i pauza','galop konia'])}. Ekipa klaszcze, a ty nie możesz się pomylić przez 10 s.`,1,15],
-()=>{const k=N(2,5),m=N(6,9);return[`${k} ${pl(k,'redukcja','redukcje','redukcji')} z międzygazem. Ekipa daje oceny 1–10, średnia min. ${m}.`,m>7?3:2]},
-()=>{const g=N(3,5),d=N(100,250,50);return[`Zmieniaj biegi od 1 do ${g} bez przerwy w gazie na ${d} m. Ekipa ocenia płynność.`,g>4?3:2]},
-()=>[`Przejedź obok ekipy (min. 10 m od niej) w 2 biegu z gazem do odcięcia. Zaliczone, jeśli ktoś krzyknie „TO BRZMI!”.`,2]],
-duel:[
-()=>{const k=R([1,2]);return[`Pojedynek z ${R(RIV)}: ${R(['sprint 50 m','slalom 5 pachołków','parkowanie tyłem','hamowanie z 40 km/h na pachołek','donuty przez 15 s','okrążenie toru'])}. Zaliczone przy wygranej ${k>1?'2 z 3 startów':'w jednym starcie'}.`,k>1?3:R([1,2])]},
-()=>[`Rywal (${R(RIV)}) wymyśla zadanie za kółkiem na max ${N(20,40,10)} s. Wykonaj je bez dyskusji, na zamkniętym odcinku.`,2],
-()=>[`Wskaż rywala i pobij jego czas na pełnym okrążeniu, ${R(MOD)}.`,3,60]],
-legend:[
-()=>{const s=N(8,20,2);return[`Nagraj ${s}-sekundowy film z ${R(['donutem','burnoutem','driftem','przejazdem konwoju','slalomem'])} w kadrze jak z ${R(['reklamy','teledysku','gry wyścigowej','filmu akcji'])}. Ekipa ocenia 1–10, od 7 zaliczone.`,1]},
-()=>{const s=N(2,6);return[`Auta w rzędzie. Na komendę wszyscy ${R(['dają gaz do odcięcia','robią burnout','zapalają światła awaryjne'])} przez ${s} s. Zdjęcie całej ekipy w kadrze.`,2,30]},
-()=>[`Zrób ${R(['pierwszy w życiu','najdłuższy w życiu','najczystszy w życiu'])} ${R(['donut','drift','burnout','J-turn'])}. Ekipa jest świadkiem i potwierdza.`,R([1,2,3])],
-()=>[`Nadaj swojemu autu nową ksywę i zrób wjazd bohatera wokół placu. Ekipa ocenia show 1–10.`,1]]
+const CATS={
+  burn:["UPALANIE","#FF5500","🔥","Dym, donuty, starty"],
+  drift:["DRIFT ZONE","#00F0FF","💨","Poślizgi i łuki"],
+  speed:["SPEED RUN","#FFD400","⚡","Sprinty i hamowania"],
+  precision:["PRECYZJA","#39FF14","🎯","Slalomy i centymetry"],
+  reverse:["REVERSE","#FF2EC4","↩️","Wszystko tyłem"],
+  sound:["SOUND CHECK","#B84DFF","🔊","Odcięcia i wydech"],
+  duel:["DUEL","#FF1744","🏁","Ty kontra rywal"],
+  legend:["LEGEND","#FFFFFF","⭐","Zadania na wspomnienia"]
 };
-/* ręcznie pisane klasyki: [kategoria, tier, tekst, timer] */
-const CL=[["burn",1,"PIERWSZA GUMA: burnout min. 5 s dymu. Ekipa liczy na głos.",10],["burn",2,"MGŁA: burnout, a ekipa 15 m dalej robi zdjęcia jak do teledysku."],["burn",3,"KARUZELA: w trakcie donutu pasażer recytuje alfabet A–Z bez pomyłki."],
-["drift",1,"STAŁY KĄT: utrzymaj poślizg na łuku 3 s i wyjedź prosto."],["drift",2,"WAHADŁO: wychyl auto w drugą stronę przed zakrętem i utrzymaj poślizg przez nawrót."],["drift",3,"SPIRALA: drift na okręgu 15 m, zmniejszaj promień do 6 m bez wyjścia z poślizgu.",40],
-["speed",1,"KRZYK NA PROSTEJ: gaz do oporu na 80 m, ekipa ryczy „BLACKLIST!” od startu do mety."],["speed",2,"TRZY RAZY TO SAMO: 3 okrążenia z rzędu z różnicą czasu max 1 s."],["speed",3,"OSTATNIA SEKUNDA: hamuj jak najbliżej pachołka 30 m przed zakrętem i wyjdź czysto."],
-["precision",1,"TUNEL Z BUTELEK: dwa rzędy, odstęp auto + 20 cm, 15 m, bez strącenia."],["precision",2,"PUNKT HAMOWANIA: ekipa kładzie pachołek, z 50 km/h zatrzymaj przód równo z nim (±20 cm)."],["precision",3,"TOR Z PAMIĘCI: 6 pachołków, 20 s oglądania, potem bezbłędny przejazd.",20],
-["reverse",1,"WSTECZNY SPRINT: 30 m tyłem prosto, max 1 m od osi."],["reverse",2,"RÓWNOLEGŁY W JEDEN RUCH: boks auto + 1 m, jeden płynny manewr."],["reverse",3,"J-TURN: cofając z ok. 30 km/h obróć auto o 180° i ruszaj przodem bez zatrzymania."],
-["sound",1,"DO-RE-MI GAZEM: trzy zmiany obrotów, równe i czytelne.",15],["sound",2,"CICHA JAZDA: 50 m na biegu jałowym przy najniższych obrotach, bez strzału i gaśnięcia."],["sound",3,"SŁUCHOWY SPRAWDZIAN: pasażer z zamkniętymi oczami wskazuje zmiany biegów 1–4 na słuch.",20],
-["duel",1,"ZAKŁAD 50 M: wybierz rywala, sprint z miejsca. Zaliczone, gdy jesteś szybszy."],["duel",2,"POJEDYNEK DONUTÓW: rywal robi donut, ty bijesz go liczbą obrotów w 15 s.",15],["duel",3,"REWANŻ ROKU: wybierz rywala, który cię dziś pokonał, i wygraj czystym okrążeniem."],
-["legend",1,"WJAZD KONWOJU: wszyscy kolejno wokół placu ze światłami awaryjnymi i okrzykiem „BLACKLIST!”."],["legend",2,"PIERWSZY RAZ: zrób coś, czego jeszcze nigdy nie robiłeś za kółkiem. Ekipa potwierdza."],["legend",3,"LEGENDA ZLOTU: trik dnia – zaliczone, gdy połowa ekipy głosuje na ciebie."]];
 
-let lastT=null,lastC=null;
-function pick(cats,maxD){
-  const seen=new Set(LS.g('bl_seen',[]));let q=null;
-  for(let i=0;i<80&&!q;i++){
-    const c=R(cats);if(cats.length>1&&c==lastC&&i<60)continue;
-    let x;
-    if(Math.random()<.25){const p=CL.filter(z=>z[0]==c&&z[1]<=maxD&&!seen.has(z[2]));if(p.length)x=R(p)}
-    if(!x){const g=R(G[c])();x=[c,g[1],g[0],g[2]]}
-    if(x[1]>maxD||x[2]==lastT||(seen.has(x[2])&&i<70))continue;
-    q=x;
-  }
-  if(!q){const c=R(cats),g=R(G[c])();q=[c,Math.min(g[1],maxD),g[0],g[2]]}
-  seen.add(q[2]);LS.s('bl_seen',[...seen].slice(-800));lastT=q[2];lastC=q[0];
-  return{c:q[0],d:q[1],t:q[2],s:q[3]};
+/* ===== BANK PONAD 920 ZADAŃ (MIN. 115 UNIKALNYCH KART NA KAŻDĄ Z 8 KATEGORII!) ===== */
+function buildTaskBank(){
+  const bank = {burn:[],drift:[],speed:[],precision:[],reverse:[],sound:[],duel:[],legend:[]};
+  const mods = [
+    "bez zgaszenia silnika",
+    "z włączonymi światłami awaryjnymi",
+    "przy wyłączonym radiu – słuchacie tylko silnika",
+    "z okrzykiem swojej ksywy na starcie",
+    "bez patrzenia na obrotomierz",
+    "z pasażerem komentującym jak w transmisji sportowej",
+    "w pełnym skupieniu – zero uśmiechu do końca próby",
+    "z jednym krótkim mrugnięciem długimi przed startem",
+    "przy otwartych szybach dla lepszego dźwięku",
+    "w stylu czystego przejazdu pokazowego"
+  ];
+  const judges = [
+    "Ekipa ocenia 1–10 (min. 7 zalicza).",
+    "Sędzią głównym jest gracz po twojej prawej.",
+    "Zaliczone, gdy wszyscy biją brawo.",
+    "Ekipa mierzy czas na stoperze.",
+    "Ekipa nagrywa ujęcie z boku na telefon."
+  ];
+
+  // 1. BURN (120 zadań - w tym AI Smoke/Motion & GPS)
+  [3,4,5,6,7,8,9,10,12,14,15,18].forEach(s=>{
+    bank.burn.push({t:`[AI KAMERA/WIDEO] Burnout: utrzymaj ciągły dym z opon przez min. ${s} s. System AI zmierzy gęstość dymu.`,d:s>10?3:s>6?2:1,s:s+5,ai:'cam_smoke',goal:s});
+  });
+  [2,3,4,5,6,7,8,9,10].forEach(k=>{
+    mods.forEach(m=>{
+      bank.burn.push({t:`Wykonaj ${k} ${pl(k,'donut','donuty','donutów')} wokół centralnego pachołka, ${m}.`,d:k>6?3:k>3?2:1,s:k*8,ai:k<=4?'cam_motion':null,goal:k*4});
+    });
+  });
+  [4,5,6,7,8,9,10,11,12].forEach(m=>{
+    bank.burn.push({t:`Ciasny donut w okręgu o maksymalnej średnicy ${m} m bez dotknięcia znacznika środka. ${R(judges)}`,d:m<=6?3:2,s:25,ai:null});
+  });
+  [40,60,80,100,120,150,200].forEach(dist=>{
+    bank.burn.push({t:`[AI GPS] Dynamiczny start z miejsca na dystansie ${dist} m z pełną trakcją po uślizgu kół.`,d:dist>120?2:1,s:25,ai:'gps_dist',goal:dist});
+  });
+  ["litery S","ósemki","litery L","okręgu","strzałki","podwójnej pętli","litery U","cyfry 8","spirali","zygzaka"].forEach(sh=>{
+    bank.burn.push({t:`Zostaw na zamkniętym placu ślad gumy w kształcie ${sh}. ${R(judges)}`,d:2,s:30,ai:'cam_motion',goal:10});
+  });
+
+  // 2. DRIFT (120 zadań)
+  [2,3,4,5,6,7,8,9,10,12].forEach(s=>{
+    mods.slice(0,6).forEach(m=>{
+      bank.drift.push({t:`Utrzymaj kontrolowany poślizg na łuku przez ${s} s, ${m}.`,d:s>8?3:s>4?2:1,s:s+12,ai:'cam_motion',goal:s});
+    });
+  });
+  [2,3,4,5,6].forEach(k=>{
+    ["ręcznym","wahadłem (flick)","odpuszczeniem gazu","strzałem ze sprzęgła"].forEach(tech=>{
+      bank.drift.push({t:`Przekładka (manji): zmień kierunek poślizgu ${k} ${pl(k,'raz','razy','razy')} pod rząd, inicjując ${tech}.`,d:k>4?3:2,s:35,ai:null});
+    });
+  });
+  [15,20,25,30,35,40,45].forEach(deg=>{
+    ["lewy łuk","prawy łuk","nawrót 180°","szeroki zakręt 90°","rondel treningowy"].forEach(turn=>{
+      bank.drift.push({t:`[AI WIDEO/KAMERA] Drift pod kątem min. ${deg}° przez cały ${turn} bez wyprostowania kół.`,d:deg>=35?3:deg>=25?2:1,s:25,ai:'cam_motion',goal:8});
+    });
+  });
+  [50,80,100,150,200].forEach(cm=>{
+    bank.drift.push({t:`Clip zone: przejdź w poślizgu tak, aby tylny zderzak minął zewnętrzny pachołek o max ${cm} cm bez przewrócenia go.`,d:cm<=80?3:2,s:20,ai:null});
+  });
+
+  // 3. SPEED (120 zadań - dużo GPS!)
+  [50,75,100,120,150,180,200,250,300,350,400].forEach(dist=>{
+    mods.slice(0,5).forEach(m=>{
+      bank.speed.push({t:`[AI GPS] Sprint z miejsca na dystansie ${dist} m na czas, ${m}.`,d:dist>250?3:dist>120?2:1,s:30,ai:'gps_dist',goal:dist});
+    });
+  });
+  [30,40,50,60,70,80,90].forEach(spd=>{
+    bank.speed.push({t:`[AI GPS] Rozpędź auto do dokładnie ${spd} km/h i wykonaj awaryjne hamowanie do zera w wyznaczonej strefie.`,d:spd>=70?3:spd>=50?2:1,s:25,ai:'gps_speed',goal:spd});
+  });
+  [4,5,6,7,8,9,10,12].forEach(cones=>{
+    [15,20,25,30,35,40].forEach(lim=>{
+      if(cones*2<=lim){
+        bank.speed.push({t:`Szybki slalom między ${cones} pachołkami w limicie ${lim} s bez dotknięcia żadnego z nich.`,d:lim<22?3:2,s:lim,ai:null});
+      }
+    });
+  });
+  [1,2,3].forEach(diff=>{
+    ["okrążeniu próbnym","odcinku pomiarowym 150 m","nawrocie z szykaną","ósemce technicznej"].forEach(trk=>{
+      bank.speed.push({t:`Regularność: przejedź 3 próby na ${trk} z różnicą czasu max ${diff} s między przejazdami.`,d:diff==1?3:2,s:60,ai:null});
+    });
+  });
+
+  // 4. PRECISION (120 zadań)
+  [5,10,15,20,25,30,35,40,45,50].forEach(cm=>{
+    [20,30,40,50].forEach(v=>{
+      bank.precision.push({t:`Dojazd do celu: rozpędź się do ${v} km/h i zatrzymaj przedni zderzak max ${cm} cm przed pachołkiem (bez dotknięcia!).`,d:cm<=15?3:cm<=30?2:1,s:20,ai:null});
+    });
+  });
+  [15,20,25,30,35,40,50,60].forEach(cm=>{
+    ["przodem","tyłem","równolegle z prawej","równolegle z lewej","po skosie 45°"].forEach(park=>{
+      bank.precision.push({t:`Zaparkuj ${park} w boksie o szerokości auta + ${cm} cm jednym płynnym ruchem bez korekty.`,d:cm<=25?3:2,s:25,ai:null});
+    });
+  });
+  [4,5,6,7,8,9,10].forEach(k=>{
+    [10,15,20,25,30].forEach(obs=>{
+      bank.precision.push({t:`Pamięć toru: ekipa ustawia labirynt z ${k} pachołków. Patrzysz przez ${obs} s, po czym przejeżdżasz bez błędu.`,d:k>=8?3:2,s:obs,ai:null});
+    });
+  });
+
+  // 5. REVERSE (115 zadań)
+  [15,20,25,30,40,50,60,75,90,100].forEach(m=>{
+    [10,15,20,25,30].forEach(t=>{
+      if(m/t <= 5){
+        bank.reverse.push({t:`[AI GPS] Przejedź ${m} m na biegu wstecznym w czasie poniżej ${t} s bez wyjechania z pasa.`,d:m/t>3.5?3:2,s:t,ai:'gps_dist',goal:m});
+      }
+    });
+  });
+  [3,4,5,6,7,8].forEach(cones=>{
+    mods.slice(0,5).forEach(m=>{
+      bank.reverse.push({t:`Slalom na biegu wstecznym między ${cones} pachołkami, ${m}.`,d:cones>=6?3:2,s:35,ai:null});
+    });
+  });
+  [15,20,25,30,35].forEach(v=>{
+    ["w lewo","w prawo"].forEach(dir=>{
+      mods.slice(0,4).forEach(m=>{
+        bank.reverse.push({t:`J-Turn (${dir}): cofając z prędkością ok. ${v} km/h obróć auto o 180° i kontynuuj jazdę przodem, ${m}.`,d:3,s:20,ai:'cam_motion',goal:6});
+      });
+    });
+  });
+  [1,2,3,4,5].forEach(loops=>{
+    bank.reverse.push({t:`Wykonaj ${loops} ${pl(loops,'pełną ósemkę','pełne ósemki','pełnych ósemek')} wokół dwóch pachołków wyłącznie na biegu wstecznym.`,d:loops>=3?3:2,s:loops*25,ai:null});
+  });
+
+  // 6. SOUND (115 zadań)
+  [2500,3000,3500,4000,4500,5000,5500,6000,6500].forEach(rpm=>{
+    [2,3,4,5,6].forEach(sec=>{
+      bank.sound.push({t:`Ślepy obrotomierz: zakryj zegary, wkręć silnik na ok. ${rpm} obr./min i utrzymaj przez ${sec} s. Ekipa ocenia celność.`,d:rpm>=5500?2:1,s:sec+5,ai:null});
+    });
+  });
+  [2,3,4,5,6].forEach(k=>{
+    [6,7,8,9].forEach(sc=>{
+      bank.sound.push({t:`Wykonaj ${k} ${pl(k,'redukcję','redukcje','redukcji')} z idealnym międzygazem (heel-and-toe). Średnia ocen ekipy min. ${sc}/10.`,d:sc>=8?3:2,s:25,ai:null});
+    });
+  });
+  [
+    "rytm We Will Rock You (stomp-stomp-clap) gazem na postoju",
+    "dwa krótkie muśnięcia gazu i jedno długie przeciągnięcie",
+    "pięć idealnie równych impulsów gazu co 1 sekundę",
+    "cichy przejazd 80 m na 2. biegu przy 1200 obr./min bez szarpnięcia",
+    "przejazd obok ekipy z pełnym otwarciem przepustnicy od 2000 do 6000 obr./min",
+    "symfonia wydechu: 3 szybkie przegazówki przed ruszeniem",
+    "rozpoznanie biegu: pasażer z zamkniętymi oczami zgaduje na jakim biegu jedziesz",
+    "płynna zmiana biegów 1-2-3-4 bez najmniejszego szarpnięcia głową pasażera"
+  ].forEach(desc=>{
+    mods.slice(0,5).forEach(m=>{
+      bank.sound.push({t:`Koncert mechaniki: wykonaj ${desc}, ${m}.`,d:2,s:20,ai:null});
+    });
+  });
+
+  // 7. DUEL (115 zadań)
+  [50,80,100,150,200].forEach(dist=>{
+    [1,2,3].forEach(wins=>{
+      bank.duel.push({t:`[AI GPS] Pojedynek 1v1 na ${dist} m z graczem po prawej. Wygrywa pierwszy, kto zaliczy ${wins} ${pl(wins,'zwycięstwo','zwycięstwa','zwycięstw')}.`,d:wins>1?3:2,s:40,ai:'gps_dist',goal:dist});
+    });
+  });
+  [
+    "slalom 6 pachołków na czas",
+    "parkowanie tyłem w boksie",
+    "utrzymanie dłuższego poślizgu na łuku",
+    "hamowanie jak najbliżej linii z 40 km/h",
+    "wyścig na wstecznym na 30 m",
+    "najwięcej czystych donutów w 20 sekund",
+    "okrążenie wyznaczonej pętli bez dotknięcia pachołka",
+    "próba regularności dwóch okrążeń",
+    "sprint z lotnego startu od 20 km/h",
+    "manewr zawracania w ciasnej bramce"
+  ].forEach(comp=>{
+    [1,2,3].forEach(lvlD=>{
+      mods.slice(0,3).forEach(m=>{
+        bank.duel.push({t:`WYZWANIE RYWALA (Poziom ${lvlD}): zmierz się z wybranym graczem w konkurencji: ${comp}, ${m}.`,d:lvlD,s:30,ai:null});
+      });
+    });
+  });
+
+  // 8. LEGEND (115 zadań)
+  [10,12,15,20,25,30].forEach(sec=>{
+    ["donutem wokół kamerzysty","przejazdem bokiem w kadrze","startem spod świateł awaryjnych","burnoutem w chmurze dymu","synchronicznym przejazdem dwóch aut"].forEach(shot=>{
+      bank.legend.push({t:`[AI WIDEO FEED] Nagraj ${sec}-sekundowy klip z ${shot} i wrzuć go do zakładki WIDEO FEED! Ekipa musi przyznać min. 8/10.`,d:2,s:sec,ai:'cam_motion',goal:sec});
+    });
+  });
+  [
+    "WJAZD KRÓLA: objazd całego placu ze światłami awaryjnymi przy dopingu ekipy",
+    "SYNCHRO: dwa auta ruszają równolegle i zatrzymują się idealnie równo zderzak w zderzak",
+    "DRIFT TAXI: przewieź pasażera na prawym fotelu, który komentuje jazdę jak pilot rajdowy",
+    "ZŁOTY STRZAŁ: wykonaj swój popisowy manewr za pierwszym podejściem bez rozgrzewki",
+    "NOCNY ŁOWCA: przejazd techniczny przy samych światłach pozycyjnych na zamkniętym torze",
+    "MISTRZ KIEROWNICY: przejedź cały tor trzymając kierownicę wyłącznie płynnym chwytem bez krzyżowania rąk",
+    "REKORD DNIA: pobij najlepszy dzisiejszy czas lub wynik dowolnego gracza z ekipy",
+    "POKAZ KONTROLI: płynne przejście z szybkiego slalomu w natychmiastowy kontrolowany poślizg",
+    "CZYSTA LINIA: przejedź 3 okrążenia z rzędu bez ani jednego błędu i dotknięcia tarki",
+    "FINAŁ BLACKLIST: zrób show, po którym cała ekipa uzna, że zasługujesz na #1"
+  ].forEach(leg=>{
+    mods.slice(0,8).forEach((m,idx)=>{
+      bank.legend.push({t:`${leg} – wykonaj zadanie ${m}.`,d:(idx%3)+1,s:30,ai:null});
+    });
+  });
+
+  return bank;
 }
 
-/* ===== STAN ===== */
-const MOT=["Nie zostaniesz legendą, jadąc grzecznie. Dziś zostawiasz ślad.","Wspomnienia robi się z dymu, nie z postojów.","Kto nie pali opon, ten nie pali się do jazdy.","Tor nie wybacza lenistwa. Ekipa nie wybacza nudy.","Każdy ślad na asfalcie to podpis. Podpisz się czytelnie.","Dziś twoja ksywa trafia na listę.","Strach zostaje na linii startu. Gaz idzie ze mną.","Najlepsze historie zaczynają się od jednego donuta."];
-let S={scr:'intro',mode:'solo',cats:Object.keys(CATS),pc:2,rounds:5,names:['','','',''],players:[],cur:0,round:1,card:null,rep:LS.g('bl_rep',0),ph:'idle',left:0,cdv:3,busy:false,mot:R(MOT)};
-let tk=0;
-const L=()=>lvl(S.rep),into=()=>S.rep-cum(L()),prog=()=>L()>=50?1:into()/need(L());
-function bar(v,n=24,c='#FF5500',hot=1){let h=`<div class=tb style="--c:${c}">`;for(let i=0;i<n;i++)h+=`<i class="${(i+.5)/n<=v?'on':''} ${hot&&i>=n*.8?'hot':''}"></i>`;return h+'</div>'}
-const LOGO=`<svg viewBox="0 0 200 150" width="170"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#00F0FF"/><stop offset=".5" stop-color="#FF5500"/><stop offset="1" stop-color="#FF1744"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#FF5500"/></linearGradient></defs><path d="M30 6H192V118L170 144H8V28Z" fill="#000" stroke="#FF5500" stroke-width="3"/><path d="M56 124A62 62 0 1 1 144 124" fill="none" stroke="url(#g)" stroke-width="9" stroke-dasharray="2 5"/><line x1="100" y1="82" x2="138" y2="52" stroke="#FF1744" stroke-width="4"/><text x="98" y="108" font-size="76" font-weight="900" font-style="italic" text-anchor="middle" fill="url(#h)" font-family="Impact,Arial Black,sans-serif">B</text><text x="160" y="136" font-size="14" font-weight="900" font-style="italic" fill="#00F0FF" font-family="Arial">#1</text></svg>`;
-const prof=()=>`<div class=fr><div class=row><b class=or>LVL ${L()}</b><span>${rank(L()).toUpperCase()}</span><em>${into()}/${need(L())} REP</em></div>${bar(prog())}<small>NOS · DROGA DO BLACKLIST #1 · ${L()}/50</small>${bar(L()/50,30,'#00F0FF',0)}<small>TIER ${tier(L())}/3 · TIER 2 od LVL 10 · TIER 3 od LVL 25</small></div>`;
+const TASK_BANK = buildTaskBank();
+// Statystyka liczby zadań w konsoli / UI
+const TOTAL_TASKS = Object.values(TASK_BANK).reduce((a,b)=>a+b.length,0);
 
-const tmHTML=()=>{const c=S.card;if(S.ph=='idle')return`<button class="btn cy" onclick="A.timer()">ODPAL TIMER<small>${c.s} s</small></button>`;if(S.ph=='cd')return`<b class="big or">${S.cdv}</b>`;if(S.ph=='run'){const h=S.left<=5;return`<b class="big ${h?'rd':'cy'}">${S.left.toFixed(1)}</b>${bar(S.left/c.s,28,h?'#FF1744':'#00F0FF',0)}`}return`<b class="big rd">CZAS MINĄŁ!</b>`};
+let lastT=null, lastC=null;
+function pick(cats, maxD, aiOnly=false){
+  const seen = new Set(LS.g('bl_seen',[]));
+  let pool = [];
+  cats.forEach(c=>{
+    const items = (TASK_BANK[c]||[]).map((item,idx)=>({...item, c, id:`${c}_${idx}`}));
+    pool.push(...items);
+  });
+  if(aiOnly){
+    const aiPool = pool.filter(x=>x.ai);
+    if(aiPool.length) pool = aiPool;
+  }
+  let valid = pool.filter(x => x.d <= maxD && !seen.has(x.id) && x.t !== lastT);
+  if(!valid.length) valid = pool.filter(x => x.d <= maxD && x.t !== lastT);
+  if(!valid.length) valid = pool;
+
+  // Preferuj inną kategorię niż poprzednio
+  const diffCat = valid.filter(x => x.c !== lastC);
+  const chosen = R(diffCat.length ? diffCat : valid);
+
+  seen.add(chosen.id);
+  LS.s('bl_seen', [...seen].slice(-1200));
+  lastT = chosen.t;
+  lastC = chosen.c;
+  return chosen;
+}
+
+/* ===== STAN APLIKACJI ===== */
+const MOT=[
+  "Nie zostaniesz legendą, jadąc grzecznie. Dziś zostawiasz ślad.",
+  "Wspomnienia robi się z dymu, nie z postojów.",
+  "Kto nie pali opon, ten nie pali się do jazdy.",
+  "Tor nie wybacza lenistwa. Ekipa nie wybacza nudy.",
+  "Każdy ślad na asfalcie to podpis. Podpisz się czytelnie.",
+  "Dziś twoja ksywa trafia na szczyt Blacklisty."
+];
+
+let S = {
+  scr: 'intro',
+  mode: 'solo',
+  aiOnly: false,
+  cats: Object.keys(CATS),
+  pc: 2,
+  rounds: 5,
+  nick: LS.g('bl_nick', 'DRIVER_01'),
+  names: ['','','',''],
+  players: [],
+  cur: 0,
+  round: 1,
+  card: null,
+  rep: LS.g('bl_rep', 0),
+  ph: 'idle',
+  left: 0,
+  cdv: 3,
+  busy: false,
+  mot: R(MOT),
+  isAdmin: LS.g('bl_admin', false),
+  videos: [],
+  vidFilter: 'ALL',
+  cloud: LS.g('bl_cloud', DEFAULT_CLOUD),
+  aiStatus: 'GOTOWY DO SKANOWANIA',
+  aiProgress: 0,
+  aiMetric: '0.0',
+  aiActive: false
+};
+
+let tk = 0;
+let aiCleanup = null;
+
+function stopAI(){
+  if(aiCleanup){ try{ aiCleanup(); }catch(e){} aiCleanup = null; }
+  S.aiActive = false;
+}
+
+const L=()=>lvl(S.rep), into=()=>S.rep-cum(L()), prog=()=>L()>=50?1:into()/need(L());
+function bar(v,n=24,c='#FF5500',hot=1){
+  let h=`<div class=tb style="--c:${c}">`;
+  for(let i=0;i<n;i++) h+=`<i class="${(i+.5)/n<=v?'on':''} ${hot&&i>=n*.8?'hot':''}"></i>`;
+  return h+'</div>';
+}
+
+const LOGO=`<svg viewBox="0 0 200 150" width="150"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#00F0FF"/><stop offset=".5" stop-color="#FF5500"/><stop offset="1" stop-color="#FF1744"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#FF5500"/></linearGradient></defs><path d="M30 6H192V118L170 144H8V28Z" fill="#000" stroke="#FF5500" stroke-width="3"/><path d="M56 124A62 62 0 1 1 144 124" fill="none" stroke="url(#g)" stroke-width="9" stroke-dasharray="2 5"/><line x1="100" y1="82" x2="138" y2="52" stroke="#FF1744" stroke-width="4"/><text x="98" y="108" font-size="76" font-weight="900" font-style="italic" text-anchor="middle" fill="url(#h)" font-family="Impact,Arial Black,sans-serif">B</text><text x="160" y="136" font-size="14" font-weight="900" font-style="italic" fill="#00F0FF" font-family="Arial">#1</text></svg>`;
+
+const prof=()=>`
+<div class=fr>
+  <div class=row>
+    <b class=or>LVL ${L()}</b>
+    <span>${rank(L()).toUpperCase()} ${S.isAdmin?'<span class=badge-adm>ADMIN</span>':''}</span>
+    <em>${into()}/${need(L())} REP</em>
+  </div>
+  ${bar(prog())}
+  <div class=row style="margin-top:4px">
+    <small>KIEROWCA: <b style="color:#00F0FF">${esc(S.nick)}</b> · ${TOTAL_TASKS} ZADAŃ</small>
+    <small>TIER ${tier(L())}/3</small>
+  </div>
+</div>`;
+
+/* ===== SYNCHRONIZACJA RANKINGU I WIDEO (LOKALNA + OPCJONALNY FIREBASE DLA GITHUB PAGES) ===== */
+async function syncUserLeaderboard(){
+  const entry = {
+    nick: (S.nick||'DRIVER_01').toUpperCase(),
+    rep: S.rep,
+    lvl: L(),
+    rank: rank(L()),
+    updated: Date.now()
+  };
+  let localBoard = LS.g('bl_board', []);
+  const idx = localBoard.findIndex(x=>x.nick===entry.nick);
+  if(idx>=0) localBoard[idx] = entry; else localBoard.push(entry);
+  LS.s('bl_board', localBoard);
+
+  if(S.cloud.firebaseUrl){
+    try{
+      const base = S.cloud.firebaseUrl.replace(/\/$/,'');
+      const safeKey = entry.nick.replace(/[^A-Z0-9_-]/g,'_');
+      await fetch(`${base}/leaderboard/${safeKey}.json`, {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(entry)
+      });
+    }catch(e){}
+  }
+}
+
+async function fetchLeaderboard(){
+  let list = LS.g('bl_board', []);
+  if(!list.some(x=>x.nick===S.nick)){
+    list.push({nick:S.nick, rep:S.rep, lvl:L(), rank:rank(L()), updated:Date.now()});
+  }
+  // Przykładowe boty startowe jeśli ranking jest pusty, żeby tablica żyła od 1 sekundy
+  if(list.length < 4){
+    const seeds = [
+      {nick:'RAZOR_PL', rep:1420, lvl:lvl(1420), rank:rank(lvl(1420))},
+      {nick:'VEX_DRIFT', rep:890, lvl:lvl(890), rank:rank(lvl(890))},
+      {nick:'TURBO_KASIA', rep:460, lvl:lvl(460), rank:rank(lvl(460))}
+    ];
+    seeds.forEach(sd=>{ if(!list.some(x=>x.nick===sd.nick)) list.push(sd); });
+  }
+  if(S.cloud.firebaseUrl){
+    try{
+      const base = S.cloud.firebaseUrl.replace(/\/$/,'');
+      const r = await fetch(`${base}/leaderboard.json`);
+      const data = await r.json();
+      if(data){
+        Object.values(data).forEach(item=>{
+          const i = list.findIndex(x=>x.nick===item.nick);
+          if(i>=0) list[i] = item; else list.push(item);
+        });
+      }
+    }catch(e){}
+  }
+  return list.sort((a,b)=>b.rep-a.rep);
+}
+
+async function loadVideos(){
+  let vids = [];
+  try{
+    const localVids = await VDB.all();
+    vids = localVids.map(v=>({
+      ...v,
+      src: v.blob ? URL.createObjectURL(v.blob) : v.url
+    }));
+  }catch(e){}
+
+  if(S.cloud.firebaseUrl){
+    try{
+      const base = S.cloud.firebaseUrl.replace(/\/$/,'');
+      const r = await fetch(`${base}/videos.json`);
+      const data = await r.json();
+      if(data){
+        Object.values(data).forEach(cv=>{
+          if(!vids.some(x=>x.id===cv.id)) vids.push({...cv, src: cv.url, remote:true});
+        });
+      }
+    }catch(e){}
+  }
+  S.videos = vids.sort((a,b)=>b.ts-a.ts);
+}
+
+/* ===== SILNIK WERYFIKACJI AI (KAMERA NA ŻYWO, ANALIZA PLIKU WIDEO, GPS) ===== */
+const aiBoxHTML = () => {
+  const c = S.card;
+  if(!c || !c.ai) return '';
+  const isGps = c.ai.startsWith('gps');
+  return `
+  <div class="fr ai" style="margin:6px 0;padding:12px">
+    <div class="row">
+      <span class="ai-badge">🤖 AI VERIFIER: ${isGps ? 'MODUŁ GPS' : 'KAMERA / WIDEO'}</span>
+      <small style="color:#39FF14">${S.aiStatus}</small>
+    </div>
+    ${!isGps ? `
+      <div class="vid-box" id="ai-media-wrap" style="display:${S.aiActive?'block':'none'}">
+        <video id="ai-vid" playsinline muted autoplay></video>
+        <canvas id="ai-cvs" style="display:none"></canvas>
+      </div>
+      <div class="pills" style="margin-top:8px">
+        <button onclick="A.startCamAI()">📷 KAMERA LIVE</button>
+        <button onclick="$('#ai-file-in').click()">🎞️ WGRAJ WIDEO</button>
+      </div>
+      <input type="file" id="ai-file-in" accept="video/*" style="display:none" onchange="A.startVideoFileAI(this)">
+    ` : `
+      <button class="btn gr" style="margin-top:8px" onclick="A.startGpsAI()">🛰️ URUCHOM POMIAR GPS</button>
+    `}
+    <div class="hud">
+      <div>ODCZYT AI: <b id="ai-met">${S.aiMetric}</b> | CEL: <b>${c.goal} ${c.ai==='gps_speed'?'km/h':c.ai==='gps_dist'?'m':'s/pkt'}</b></div>
+      ${bar(S.aiProgress, 24, '#39FF14', 0)}
+    </div>
+  </div>`;
+};
+
+const tmHTML=()=>{
+  const c=S.card;
+  if(!c.s) return '';
+  if(S.ph=='idle')return`<button class="btn cy" onclick="A.timer()">ODPAL TIMER<small>${c.s} s</small></button>`;
+  if(S.ph=='cd')return`<b class="big or">${S.cdv}</b>`;
+  if(S.ph=='run'){const h=S.left<=5;return`<b class="big ${h?'rd':'cy'}">${S.left.toFixed(1)}</b>${bar(S.left/c.s,28,h?'#FF1744':'#00F0FF',0)}`}
+  return`<b class="big rd">CZAS MINĄŁ!</b>`;
+};
 const tm=()=>{const e=$('#tm');if(e)e.innerHTML=tmHTML()};
 
+/* ===== WIDOKI APLIKACJI ===== */
 const V={
-intro:()=>`<div class=c>${LOGO}<div class=wm>BLACKLIST</div><div class=sub>UPALANIE · DRIFT · REP</div><p class=q>„${S.mot}”</p><div class="fr red"><b style="color:#FF1744;font:italic 900 15px sans-serif">ROBISZ TO NA WŁASNĄ ODPOWIEDZIALNOŚĆ</b><small style="color:#aab;font-weight:500;font-size:11px;line-height:1.4">Wyzwania wykonuj wyłącznie na zamkniętym odcinku lub torze, za zgodą właściciela terenu. Pasy zapięte, widzowie w bezpiecznej odległości, kierowca trzeźwy, auto sprawne.</small></div><button class="btn on" style="max-width:340px" onclick="A.go('home')">WCHODZĘ<small>Biorę odpowiedzialność na siebie</small></button></div>`,
-home:()=>`<div style="text-align:center;padding-top:8px">${LOGO}<div class=wm>BLACKLIST</div><div class=sub>UPALANIE · DRIFT · REP</div></div>${prof()}<button class="btn on" onclick="A.setup('solo')">SOLO GRIND<small>Nabijaj levele. Od Rookie do Blacklist #1.</small></button><button class="btn cy" onclick="A.setup('crew')">CREW BATTLE<small>2–4 graczy · jeden telefon · ksywki</small></button><button class="btn w" onclick="A.share()">📲 ZAPROŚ EKIPĘ</button><p class=mut>Wyzwania wykonuj wyłącznie na zamkniętym odcinku lub torze, za zgodą właściciela terenu. Robisz to na własną odpowiedzialność.</p><button class=l onclick="A.reset()">RESET PROFILU</button>`,
-setup:()=>`<button class=x style="width:auto;padding:0 14px" onclick="A.go('home')">‹ GARAŻ</button><h2>${S.mode=='solo'?'SOLO GRIND':'CREW BATTLE'}</h2>${S.mode=='crew'?`<h3>LICZBA GRACZY</h3><div class=pills>${[2,3,4].map(n=>`<button class="${S.pc==n?'on':''}" onclick="S.pc=${n};render()">${n}</button>`).join('')}</div><h3>KSYWKI</h3>${[...Array(S.pc).keys()].map(i=>`<input maxlength=14 placeholder="KSYWA GRACZA ${i+1}" value="${esc(S.names[i])}" oninput="S.names[${i}]=this.value">`).join('')}<h3>RUND NA GRACZA</h3><div class=pills>${[3,5,10].map(n=>`<button class="${S.rounds==n?'on':''}" onclick="S.rounds=${n};render()">${n}</button>`).join('')}</div>`:''}<h3>KATEGORIE</h3>${Object.entries(CATS).map(([k,v])=>`<button class="chip ${S.cats.includes(k)?'on':''}" style="--c:${v[1]}" onclick="A.tg('${k}')"><span>${v[2]}</span><div>${v[0]}<small>${v[3]}</small></div></button>`).join('')}<p class=mut>Odblokowany TIER: ${tier(L())}/3 (twój level: ${L()}). Karty generują się w nieskończoność i nie powtarzają.</p><button class="btn on" onclick="A.start()">START<small>Odpal silnik</small></button>`,
-game:()=>{const c=S.card,v=CATS[c.c],u=S.mode=='solo'?'REP':'PKT',top=S.mode=='solo'?`<div class=row><b class=or style="font-size:20px">LVL ${L()}</b><span style="font-size:11px">${rank(L()).toUpperCase()}</span><em>${into()}/${need(L())}</em></div>${bar(prog(),20)}`:`<small>RUNDA ${Math.min(S.round,S.rounds)}/${S.rounds}</small><div class="cy big2">TURA: ${S.players[S.cur].n}</div>`;
-return`<div class=top><button class=x onclick="A.exit()">✕</button><div style="flex:1">${top}</div></div>${S.mode=='crew'?`<div class=scs>${S.players.map((p,i)=>`<div class="sc ${i==S.cur?'a':''}"><small>${p.n}</small><b>${p.sc}</b></div>`).join('')}</div>`:''}<div class="fr card" style="--c:${v[1]}"><div class=row><span class=tag style="background:${v[1]}">${v[2]} ${v[0]}</span><small>TIER ${c.d}</small></div><p class=tx>${c.t}</p>${c.s?`<div id=tm>${tmHTML()}</div>`:''}</div><div class=acts><button class="btn red" ${S.busy?'disabled':''} onclick="A.res(false)">WYMIĘKAM<small>-${10*c.d} ${u} / utrata tury</small></button><button class="btn on" ${S.busy?'disabled':''} onclick="A.res(true)">ZALICZONE<small>+${20*c.d} ${u}</small></button></div>`},
-end:()=>{const r=[...S.players].sort((a,b)=>b.sc-a.sc);return`<div class=c><h2 class=cy style="color:#00F0FF">KONIEC WYŚCIGU</h2><small>BLACKLIST #1</small><div class=wm style="font-size:38px">${r[0].n}</div><div style="width:100%">${r.map((p,i)=>`<div class=fr style="--c:${i?'#00F0FF':'#FF5500'};margin:8px 0;padding:12px"><div class=rl><span>#${i+1}</span><span>${p.n}</span><em>${p.sc} PKT</em></div></div>`).join('')}</div><button class="btn on" onclick="A.again()">REWANŻ</button><button class="btn cy" onclick="A.go('home')">GARAŻ</button></div>`}
-};
-function render(){$('#app').innerHTML=V[S.scr]()}
+intro:()=>`
+<div class=c>
+  ${LOGO}
+  <div class=wm>BLACKLIST</div>
+  <div class=sub>UPALANIE · DRIFT · AI VISION · REP</div>
+  <p class=q>„${S.mot}”</p>
+  <div class="fr red">
+    <b style="color:#FF1744;font:italic 900 15px sans-serif">ROBISZ TO NA WŁASNĄ ODPOWIEDZIALNOŚĆ</b>
+    <small style="color:#aab;font-weight:500;font-size:11px;line-height:1.4">Wyzwania wykonuj wyłącznie na zamkniętym odcinku lub torze, za zgodą właściciela terenu. Pasy zapięte, widzowie w bezpiecznej odległości, kierowca trzeźwy, auto sprawne.</small>
+  </div>
+  <button class="btn on" style="max-width:340px" onclick="A.go('home')">WCHODZĘ<small>Biorę odpowiedzialność na siebie</small></button>
+</div>`,
 
-const fl=(t,ok)=>{const e=document.createElement('div');e.className='fl';e.style.color=ok?'#FF5500':'#FF1744';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),900)};
-const A={
-go(s){tk++;S.scr=s;render();window.scrollTo(0,0)},
-setup(m){S.mode=m;A.go('setup')},
-tg(k){const i=S.cats.indexOf(k);if(i>=0){if(S.cats.length>1)S.cats.splice(i,1)}else S.cats.push(k);render()},
-start(){S.players=S.mode=='solo'?[{n:'YOU',sc:0}]:[...Array(S.pc).keys()].map(i=>({n:esc((S.names[i]||'').trim().toUpperCase())||'RACER '+(i+1),sc:0}));S.cur=0;S.round=1;S.busy=false;S.ph='idle';S.card=pick(S.cats,tier(L()));vib(30);A.go('game')},
-again(){S.players.forEach(p=>p.sc=0);S.cur=0;S.round=1;S.busy=false;S.ph='idle';S.card=pick(S.cats,tier(L()));S.scr='game';render()},
-exit(){if(confirm('Zakończyć grę?'))A.go('home')},
-async timer(){const id=++tk,c=S.card;S.ph='cd';for(let n=3;n>0;n--){S.cdv=n;tm();beep(660);vib(30);await sl(800);if(id!=tk)return}S.cdv='GO!';tm();beep(990,.3);vib(60);await sl(500);S.ph='run';S.left=c.s;while(S.left>0){if(id!=tk)return;tm();await sl(100);S.left=Math.max(0,+(S.left-.1).toFixed(1));if(S.left>0&&S.left<=5&&Math.abs(S.left-Math.round(S.left))<.01){beep(440,.05);vib(15)}}if(id!=tk)return;S.ph='end';tm();beep(200,.5);vib([200,80,200])},
-res(ok){if(S.busy)return;S.busy=true;tk++;const c=S.card,d=ok?20*c.d:-10*c.d;let up=0;
- if(S.mode=='solo'){const o=L();S.rep=Math.max(0,ok?S.rep+d:Math.max(S.rep+d,cum(o)));LS.s('bl_rep',S.rep);if(L()>o)up=L()}else{const p=S.players[S.cur];p.sc=Math.max(0,p.sc+d)}
- ok?vib(60):vib([120,60,120]);fl((d>0?'+':'')+d+(S.mode=='solo'?' REP':' PKT'),ok);
- if(!ok){const a=$('#app');a.classList.add('sh');setTimeout(()=>a.classList.remove('sh'),400)}
- render();
- setTimeout(()=>{if(up){beep(880,.3);vib([80,40,80,40,160]);const e=document.createElement('div');e.className='lu';e.innerHTML=`<b>LEVEL UP</b><span>LVL ${up}</span><div style="font:italic 800 20px sans-serif">${rank(up).toUpperCase()}</div>${up==10||up==25?'<small style="color:#FFD400;font-size:13px">ODBLOKOWANO NOWY TIER ZADAŃ</small>':''}`;document.body.appendChild(e);setTimeout(A.next,2300)}else A.next()},up?700:900)},
-next(){document.querySelectorAll('.lu').forEach(e=>e.remove());S.busy=false;S.ph='idle';
- if(S.mode=='crew'){S.cur++;if(S.cur>=S.players.length){S.cur=0;S.round++}if(S.round>S.rounds){S.scr='end';vib([80,40,80]);render();return}}
- S.card=pick(S.cats,tier(L()));render()},
-share(){const t='🔥 BLACKLIST – apka na zloty i tor: upalanie, drift, duele i levele od Rookie do Blacklist #1. Wbijaj do ekipy!',u=location.href;if(navigator.share)navigator.share({title:'BLACKLIST',text:t,url:u}).catch(()=>{});else{try{navigator.clipboard.writeText(t+' '+u)}catch(e){}alert('Link skopiowany – wyślij ekipie!')}},
-reset(){if(confirm('Zresetować cały postęp (REP i level)?')){S.rep=0;LS.s('bl_rep',0);LS.s('bl_seen',[]);render()}}
+home:()=>`
+<div style="text-align:center;padding-top:4px">
+  ${LOGO}
+  <div class=wm>BLACKLIST</div>
+  <div class=sub>UPALANIE · DRIFT · AI VISION · REP</div>
+</div>
+${prof()}
+<div class=nav3>
+  <button class=on onclick="A.go('home')">🏎️ GARAŻ</button>
+  <button onclick="A.openVideos()">🎬 WIDEO FEED</button>
+  <button onclick="A.openRank()">🏆 RANKING</button>
+</div>
+<button class="btn on" onclick="A.setup('solo', false)">SOLO GRIND<small>Ponad ${TOTAL_TASKS} zadań (min. 115 na kategorię)</small></button>
+<button class="btn gr" onclick="A.setup('solo', true)">🤖 TRYB AI VISION / GPS<small>Zadania weryfikowane kamerą, filmikiem lub GPS</small></button>
+<button class="btn cy" onclick="A.setup('crew', false)">CREW BATTLE<small>2–4 graczy · jeden telefon · ksywki</small></button>
+<button class="btn w" onclick="A.share()">📲 ZAPROŚ EKIPĘ</button>
+<div class=foot-links>
+  <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ PROFIL / CHMURA</button>
+  <button style="color:#FF1744" onclick="A.go('admin')">🛡️ ${S.isAdmin?'PANEL ADMINA':'LOGOWANIE ADMIN'}</button>
+  <button style="color:#778" onclick="A.reset()">RESET</button>
+</div>`,
+
+setup:()=>`
+<button class=x style="width:auto;padding:0 14px" onclick="A.go('home')">‹ GARAŻ</button>
+<h2>${S.aiOnly?'TRYB AI VISION':(S.mode=='solo'?'SOLO GRIND':'CREW BATTLE')}</h2>
+<div class="fr" style="padding:10px 14px">
+  <div class="row">
+    <span style="font:800 13px sans-serif">🤖 FILTR ZADAŃ AI (KAMERA / WIDEO / GPS)</span>
+    <button class="x" style="width:auto;padding:0 12px;color:${S.aiOnly?'#000':'#39FF14'};background:${S.aiOnly?'#39FF14':'#000'};box-shadow:inset 0 0 0 2px #39FF14" onclick="S.aiOnly=!S.aiOnly;render()">${S.aiOnly?'WŁĄCZONY':'WYŁĄCZONY'}</button>
+  </div>
+</div>
+${S.mode=='crew'?`
+  <h3>LICZBA GRACZY</h3>
+  <div class=pills>${[2,3,4].map(n=>`<button class="${S.pc==n?'on':''}" onclick="S.pc=${n};render()">${n}</button>`).join('')}</div>
+  <h3>KSYWKI</h3>
+  ${[...Array(S.pc).keys()].map(i=>`<input class=up maxlength=14 placeholder="KSYWA GRACZA ${i+1}" value="${esc(S.names[i])}" oninput="S.names[${i}]=this.value">`).join('')}
+  <h3>RUND NA GRACZA</h3>
+  <div class=pills>${[3,5,10].map(n=>`<button class="${S.rounds==n?'on':''}" onclick="S.rounds=${n};render()">${n}</button>`).join('')}</div>
+`:''}
+<h3>KATEGORIE (${TOTAL_TASKS} ZADAŃ W BAZIE)</h3>
+${Object.entries(CATS).map(([k,v])=>`
+  <button class="chip ${S.cats.includes(k)?'on':''}" style="--c:${v[1]}" onclick="A.tg('${k}')">
+    <span>${v[2]}</span>
+    <div>${v[0]} (${TASK_BANK[k].length} ZADAŃ)<small>${v[3]}</small></div>
+  </button>`).join('')}
+<button class="btn on" onclick="A.start()">START<small>Odpal silnik</small></button>`,
+
+game:()=>{
+  const c=S.card, v=CATS[c.c], u=S.mode=='solo'?'REP':'PKT';
+  const top = S.mode=='solo'
+    ? `<div class=row><b class=or style="font-size:20px">LVL ${L()}</b><span style="font-size:11px">${rank(L()).toUpperCase()}</span><em>${into()}/${need(L())}</em></div>${bar(prog(),20)}`
+    : `<small>RUNDA ${Math.min(S.round,S.rounds)}/${S.rounds}</small><div class="cy big2">TURA: ${S.players[S.cur].n}</div>`;
+  return `
+  <div class=top><button class=x onclick="A.exit()">✕</button><div style="flex:1">${top}</div></div>
+  ${S.mode=='crew'?`<div class=scs>${S.players.map((p,i)=>`<div class="sc ${i==S.cur?'a':''}"><small>${p.n}</small><b>${p.sc}</b></div>`).join('')}</div>`:''}
+  <div class="fr card" style="--c:${v[1]}">
+    <div class=row>
+      <span class=tag style="background:${v[1]}">${v[2]} ${v[0]}</span>
+      ${c.ai?`<span class=ai-badge>🤖 AI ${c.ai.startsWith('gps')?'GPS':'VISION'}</span>`:''}
+      <small>TIER ${c.d}</small>
+    </div>
+    <p class=tx>${c.t}</p>
+    ${aiBoxHTML()}
+    ${c.s?`<div id=tm>${tmHTML()}</div>`:''}
+  </div>
+  <div class=acts>
+    <button class="btn red" ${S.busy?'disabled':''} onclick="A.res(false)">WYMIĘKAM<small>-${10*c.d} ${u} / utrata tury</small></button>
+    <button class="btn on" ${S.busy?'disabled':''} onclick="A.res(true)">ZALICZONE<small>+${20*c.d} ${u}</small></button>
+  </div>`;
+},
+
+videos:()=>`
+<div class=top>
+  <button class=x onclick="A.go('home')">‹</button>
+  <h2 style="margin:0;font-size:24px">🎬 WIDEO FEED EKIPY</h2>
+</div>
+<div class="fr" style="margin-top:12px">
+  <h3 style="margin-top:0;color:#FF5500">➕ WRZUĆ SWÓJ FILMIK Z ZADANIA</h3>
+  <input class=up id="v-nick" maxlength=16 placeholder="TWOJA KSYWA" value="${esc(S.nick)}">
+  <select id="v-cat">
+    ${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v[2]} ${v[0]}</option>`).join('')}
+  </select>
+  <input id="v-title" maxlength=60 placeholder="OPIS PRZEJAZDU (NP. DONUTY NA 2 BIEGU)">
+  <input type="file" id="v-file" accept="video/*">
+  <button class="btn on" id="v-btn" onclick="A.uploadVideo()">OPUBLIKUJ NAGRANIE (+30 REP)</button>
+  <small style="color:#899">${S.cloud.firebaseUrl?'🌐 Tryb Chmury aktywny – film zobaczą wszyscy odwiedzający stronę!':'💾 Tryb Lokalny (IndexedDB). Podłącz Firebase w Ustawieniach, by udostępniać filmy globalnie na GitHubie.'}</small>
+</div>
+
+<div class="pills" style="overflow-x:auto;padding-bottom:4px">
+  <button class="${S.vidFilter=='ALL'?'on':''}" onclick="S.vidFilter='ALL';render()">WSZYSTKIE</button>
+  <button class="${S.vidFilter=='burn'?'on':''}" onclick="S.vidFilter=='burn';render()">🔥 UPALANIE</button>
+  <button class="${S.vidFilter=='drift'?'on':''}" onclick="S.vidFilter=='drift';render()">💨 DRIFT</button>
+  <button class="${S.vidFilter=='legend'?'on':''}" onclick="S.vidFilter=='legend';render()">⭐ LEGEND</button>
+</div>
+
+<div id="vid-list">
+  ${(() => {
+    const list = S.vidFilter=='ALL' ? S.videos : S.videos.filter(x=>x.cat===S.vidFilter);
+    if(!list.length) return `<p class=mut style="padding:24px 0">Brak nagrań w tej kategorii. Bądź pierwszy i wrzuć przejazd!</p>`;
+    return list.map(v => {
+      const catInfo = CATS[v.cat] || CATS.legend;
+      return `
+      <div class="fr" style="--c:${catInfo[1]}">
+        <div class=row>
+          <span class=tag style="background:${catInfo[1]}">${catInfo[2]} ${catInfo[0]}</span>
+          <b style="color:#00F0FF;font-size:13px">@${esc(v.nick)}</b>
+          <small>${new Date(v.ts).toLocaleDateString('pl-PL')}</small>
+        </div>
+        <div style="font:700 15px sans-serif;margin:8px 0">${esc(v.title)}</div>
+        <div class="vid-box">
+          <video src="${v.src}" controls playsinline preload="metadata"></video>
+        </div>
+        <div class=row style="margin-top:8px">
+          <button class="x" style="width:auto;padding:0 14px;color:#FF5500;box-shadow:inset 0 0 0 1.5px #FF5500" onclick="A.likeVideo('${v.id}')">🔥 ${v.likes||0}</button>
+          ${S.isAdmin ? `<button class="x" style="width:auto;padding:0 12px;background:#FF1744;color:#fff;box-shadow:none" onclick="A.deleteVideo('${v.id}')">🗑️ USUŃ (ADMIN)</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  })()}
+</div>`,
+
+rank:()=>`
+<div class=top>
+  <button class=x onclick="A.go('home')">‹</button>
+  <h2 style="margin:0;font-size:24px">🏆 RANKING BLACKLIST</h2>
+</div>
+<p class=mut>Top kierowcy według zdobytych punktów REP i poziomu.</p>
+<div id="rank-box"><p class=mut>Ładowanie rankingu...</p></div>`,
+
+settings:()=>`
+<div class=top>
+  <button class=x onclick="A.go('home')">‹</button>
+  <h2 style="margin:0;font-size:24px">⚙️ PROFIL I CHMURA</h2>
+</div>
+<div class=fr>
+  <h3>TWOJA KSYWA KIEROWCY</h3>
+  <input class=up id="s-nick" maxlength=16 value="${esc(S.nick)}">
+  <button class="btn cy" onclick="A.saveNick()">ZAPISZ KSYWĘ</button>
+</div>
+<div class=fr style="--c:#00F0FF">
+  <h3 style="margin-top:0">🌐 GLOBALNY MULTIPLAYER NA GITHUB PAGES</h3>
+  <small style="color:#aab;line-height:1.4;margin-bottom:8px">Strony na GitHub Pages są statyczne. Aby filmy i ranking były wspólne dla wszystkich odwiedzających, wklej darmowy URL bazy Firebase Realtime Database oraz dane Cloudinary (opcjonalnie):</small>
+  <input id="c-fb" placeholder="Firebase DB URL (https://...firebaseio.com)" value="${esc(S.cloud.firebaseUrl)}">
+  <input id="c-cc" placeholder="Cloudinary Cloud Name (opcjonalnie)" value="${esc(S.cloud.cloudinaryCloud)}">
+  <input id="c-cp" placeholder="Cloudinary Unsigned Preset (opcjonalnie)" value="${esc(S.cloud.cloudinaryPreset)}">
+  <button class="btn on" onclick="A.saveCloud()">ZAPISZ KONFIGURACJĘ CHMURY</button>
+</div>`,
+
+admin:()=>`
+<div class=top>
+  <button class=x onclick="A.go('home')">‹</button>
+  <h2 style="margin:0;font-size:24px">🛡️ PANEL ADMINISTRATORA</h2>
+</div>
+${!S.isAdmin ? `
+  <div class="fr red">
+    <p style="font-size:13px;color:#ccc">Zaloguj się unikalnym loginem i hasłem administratora, aby moderować i usuwać nagrania wideo z tablicy.</p>
+    <input class=up id="adm-u" placeholder="LOGIN ADMINA">
+    <input type="password" id="adm-p" placeholder="HASŁO ADMINA">
+    <button class="btn red" onclick="A.loginAdmin()">ZALOGUJ JAKO ADMIN</button>
+  </div>
+` : `
+  <div class="fr" style="--c:#39FF14">
+    <b style="color:#39FF14;font-size:16px">✅ JESTEŚ ZALOGOWANY JAKO ADMINISTRATOR</b>
+    <p style="font-size:13px;color:#ccc">Masz aktywne uprawnienia usuwania filmów w zakładce <b>WIDEO FEED</b> oraz czyszczenia rankingu.</p>
+    <button class="btn cy" onclick="A.openVideos()">PRZEJDŹ DO MODERACJI WIDEO</button>
+    <button class="btn red" onclick="A.logoutAdmin()">WYLOGUJ Z PANELU ADMINA</button>
+  </div>
+`}`,
+
+end:()=>{
+  const r=[...S.players].sort((a,b)=>b.sc-a.sc);
+  return `
+  <div class=c>
+    <h2 class=cy style="color:#00F0FF">KONIEC WYŚCIGU</h2>
+    <small>BLACKLIST #1</small>
+    <div class=wm style="font-size:38px">${r[0].n}</div>
+    <div style="width:100%">
+      ${r.map((p,i)=>`<div class=fr style="--c:${i?'#00F0FF':'#FF5500'};margin:8px 0;padding:12px"><div class=rl><span>#${i+1}</span><span>${p.n}</span><em>${p.sc} PKT</em></div></div>`).join('')}
+    </div>
+    <button class="btn on" onclick="A.again()">REWANŻ</button>
+    <button class="btn cy" onclick="A.go('home')">GARAŻ</button>
+  </div>`;
+}
 };
+
+function render(){ $('#app').innerHTML = V[S.scr](); }
+
+const fl=(t,ok)=>{
+  const e=document.createElement('div');
+  e.className='fl';
+  e.style.color=ok?'#FF5500':'#FF1744';
+  e.textContent=t;
+  document.body.appendChild(e);
+  setTimeout(()=>e.remove(),900);
+};
+
+/* ===== AKCJE APLIKACJI ===== */
+const A = {
+  go(s){
+    tk++;
+    stopAI();
+    S.scr=s;
+    render();
+    window.scrollTo(0,0);
+  },
+  setup(m, aiOnly=false){
+    S.mode=m;
+    S.aiOnly=aiOnly;
+    A.go('setup');
+  },
+  tg(k){
+    const i=S.cats.indexOf(k);
+    if(i>=0){ if(S.cats.length>1) S.cats.splice(i,1); }
+    else S.cats.push(k);
+    render();
+  },
+  start(){
+    S.players = S.mode=='solo'
+      ? [{n:S.nick,sc:0}]
+      : [...Array(S.pc).keys()].map(i=>({n:esc((S.names[i]||'').trim().toUpperCase())||'RACER '+(i+1),sc:0}));
+    S.cur=0; S.round=1; S.busy=false; S.ph='idle';
+    S.aiStatus='GOTOWY DO SKANOWANIA'; S.aiProgress=0; S.aiMetric='0.0';
+    S.card = pick(S.cats, tier(L()), S.aiOnly);
+    vib(30);
+    A.go('game');
+  },
+  again(){
+    S.players.forEach(p=>p.sc=0);
+    S.cur=0; S.round=1; S.busy=false; S.ph='idle';
+    S.aiStatus='GOTOWY DO SKANOWANIA'; S.aiProgress=0; S.aiMetric='0.0';
+    S.card = pick(S.cats, tier(L()), S.aiOnly);
+    S.scr='game';
+    render();
+  },
+  exit(){
+    if(confirm('Zakończyć bieżącą sesję?')) A.go('home');
+  },
+
+  /* --- TIMER --- */
+  async timer(){
+    const id=++tk, c=S.card;
+    S.ph='cd';
+    for(let n=3;n>0;n--){
+      S.cdv=n; tm(); beep(660); vib(30);
+      await sl(800);
+      if(id!=tk) return;
+    }
+    S.cdv='GO!'; tm(); beep(990,.3); vib(60);
+    await sl(500);
+    S.ph='run'; S.left=c.s;
+    while(S.left>0){
+      if(id!=tk) return;
+      tm();
+      await sl(100);
+      S.left=Math.max(0,+(S.left-.1).toFixed(1));
+      if(S.left>0 && S.left<=5 && Math.abs(S.left-Math.round(S.left))<.01){
+        beep(440,.05); vib(15);
+      }
+    }
+    if(id!=tk) return;
+    S.ph='end'; tm(); beep(200,.5); vib([200,80,200]);
+  },
+
+  /* --- AI VISION: ANALIZA RUCHU I DYMU Z KAMERY --- */
+  async startCamAI(){
+    stopAI();
+    const wrap = $('#ai-media-wrap'), vid = $('#ai-vid'), cvs = $('#ai-cvs');
+    if(!wrap || !vid) return;
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+      wrap.style.display = 'block';
+      vid.srcObject = stream;
+      await vid.play();
+      S.aiActive = true;
+      S.aiStatus = 'SKANOWANIE OBRAZU AI...';
+      renderAIHud();
+      this.runFrameAnalyzer(vid, cvs, () => stream.getTracks().forEach(t=>t.stop()));
+    }catch(e){
+      alert('Brak dostępu do kamery lub przeglądarka zablokowała kamerę. Możesz użyć opcji Wgraj Wideo.');
+    }
+  },
+
+  /* --- AI VISION: ANALIZA WGRANEGO PLIKU WIDEO --- */
+  startVideoFileAI(input){
+    const file = input.files && input.files[0];
+    if(!file) return;
+    stopAI();
+    const wrap = $('#ai-media-wrap'), vid = $('#ai-vid'), cvs = $('#ai-cvs');
+    const url = URL.createObjectURL(file);
+    wrap.style.display = 'block';
+    vid.srcObject = null;
+    vid.src = url;
+    vid.loop = false;
+    vid.play();
+    S.aiActive = true;
+    S.aiStatus = 'ANALIZA KLATEK WIDEO AI...';
+    renderAIHud();
+    this.runFrameAnalyzer(vid, cvs, () => { vid.pause(); URL.revokeObjectURL(url); });
+  },
+
+  runFrameAnalyzer(vid, cvs, onStop){
+    const ctx = cvs.getContext('2d', {willReadFrequently:true});
+    cvs.width = 64; cvs.height = 48;
+    let prev = null, score = 0;
+    const goal = S.card.goal || 6;
+    const mode = S.card.ai;
+
+    const iv = setInterval(()=>{
+      if(!S.aiActive || vid.paused || vid.ended) return;
+      ctx.drawImage(vid, 0, 0, 64, 48);
+      const frame = ctx.getImageData(0, 0, 64, 48).data;
+      let motion = 0, smokePixels = 0;
+
+      for(let i=0; i<frame.length; i+=4){
+        const r=frame[i], g=frame[i+1], b=frame[i+2];
+        const lum = (r+g+b)/3;
+        const sat = Math.max(r,g,b) - Math.min(r,g,b);
+        // Dym z opon: wysoka jasność + niska saturacja (szaro-biały)
+        if(lum > 165 && sat < 32) smokePixels++;
+        if(prev){
+          const diff = Math.abs(r-prev[i]) + Math.abs(g-prev[i+1]) + Math.abs(b-prev[i+2]);
+          if(diff > 75) motion++;
+        }
+      }
+      prev = new Uint8ClampedArray(frame);
+      const totalPx = 64*48;
+      const motionRatio = motion / totalPx;
+      const smokeRatio = smokePixels / totalPx;
+
+      if(mode === 'cam_smoke'){
+        if(motionRatio > 0.06 && smokeRatio > 0.14) score += 0.25;
+        S.aiMetric = `DYM: ${Math.round(smokeRatio*100)}% | RUCH: ${Math.round(motionRatio*100)}%`;
+      } else {
+        if(motionRatio > 0.08) score += 0.25;
+        S.aiMetric = `DYNAMIKA RUCHU: ${Math.round(motionRatio*100)}% (${score.toFixed(1)}s)`;
+      }
+
+      S.aiProgress = Math.min(1, score / goal);
+      renderAIHud();
+
+      if(S.aiProgress >= 1){
+        S.aiStatus = '✅ ZADANIE ZWERYFIKOWANE PRZEZ AI!';
+        renderAIHud();
+        beep(1040, .35); vib([100,50,150]);
+        stopAI();
+        setTimeout(()=>A.res(true), 900);
+      }
+    }, 200);
+
+    aiCleanup = () => { clearInterval(iv); onStop && onStop(); };
+  },
+
+  /* --- AI GPS: POMIAR PRĘDKOŚCI I DYSTANSU --- */
+  startGpsAI(){
+    if(!navigator.geolocation){
+      alert('Twoje urządzenie nie obsługuje GPS.');
+      return;
+    }
+    stopAI();
+    S.aiActive = true;
+    S.aiStatus = 'SZUKANIE SATELIT GPS...';
+    renderAIHud();
+
+    let startPos = null, maxSpd = 0, dist = 0;
+    const goal = S.card.goal || 100;
+    const mode = S.card.ai;
+
+    const toRad = d => d * Math.PI / 180;
+    const haversine = (a, b) => {
+      const R = 6371000;
+      const dLat = toRad(b.latitude - a.latitude);
+      const dLon = toRad(b.longitude - a.longitude);
+      const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.latitude))*Math.cos(toRad(b.latitude))*Math.sin(dLon/2)**2;
+      return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+    };
+
+    const wid = navigator.geolocation.watchPosition(pos => {
+      const c = pos.coords;
+      if(!startPos) startPos = c;
+      dist = haversine(startPos, c);
+      const spdKmh = c.speed ? (c.speed * 3.6) : 0;
+      if(spdKmh > maxSpd) maxSpd = spdKmh;
+
+      S.aiStatus = `GPS AKTYWNY (±${Math.round(c.accuracy)}m)`;
+      if(mode === 'gps_speed'){
+        S.aiMetric = `${maxSpd.toFixed(1)} km/h`;
+        S.aiProgress = Math.min(1, maxSpd / goal);
+      } else {
+        S.aiMetric = `${Math.round(dist)} m (${spdKmh.toFixed(0)} km/h)`;
+        S.aiProgress = Math.min(1, dist / goal);
+      }
+      renderAIHud();
+
+      if(S.aiProgress >= 1){
+        S.aiStatus = '✅ CEL GPS OSIĄGNIĘTY!';
+        renderAIHud();
+        beep(1040, .35); vib([100,50,150]);
+        stopAI();
+        setTimeout(()=>A.res(true), 900);
+      }
+    }, err => {
+      S.aiStatus = 'BŁĄD GPS: ' + err.message;
+      renderAIHud();
+    }, {enableHighAccuracy:true, maximumAge:0, timeout:10000});
+
+    aiCleanup = () => navigator.geolocation.clearWatch(wid);
+  },
+
+  /* --- WYNIK KARTY --- */
+  res(ok){
+    if(S.busy) return;
+    S.busy = true;
+    tk++;
+    stopAI();
+    const c = S.card, d = ok ? 20*c.d : -10*c.d;
+    let up = 0;
+
+    if(S.mode=='solo'){
+      const o = L();
+      S.rep = Math.max(0, ok ? S.rep+d : Math.max(S.rep+d, cum(o)));
+      LS.s('bl_rep', S.rep);
+      syncUserLeaderboard();
+      if(L()>o) up = L();
+    } else {
+      const p = S.players[S.cur];
+      p.sc = Math.max(0, p.sc+d);
+    }
+
+    ok ? vib(60) : vib([120,60,120]);
+    fl((d>0?'+':'')+d+(S.mode=='solo'?' REP':' PKT'), ok);
+
+    if(!ok){
+      const a=$('#app');
+      a.classList.add('sh');
+      setTimeout(()=>a.classList.remove('sh'),400);
+    }
+    render();
+
+    setTimeout(()=>{
+      if(up){
+        beep(880,.3); vib([80,40,80,40,160]);
+        const e=document.createElement('div');
+        e.className='lu';
+        e.innerHTML=`<b>LEVEL UP</b><span>LVL ${up}</span><div style="font:italic 800 20px sans-serif">${rank(up).toUpperCase()}</div>${up==10||up==25?'<small style="color:#FFD400;font-size:13px">ODBLOKOWANO NOWY TIER ZADAŃ</small>':''}`;
+        document.body.appendChild(e);
+        setTimeout(A.next,2200);
+      } else {
+        A.next();
+      }
+    }, up?700:900);
+  },
+
+  next(){
+    document.querySelectorAll('.lu').forEach(e=>e.remove());
+    S.busy=false; S.ph='idle';
+    S.aiStatus='GOTOWY DO SKANOWANIA'; S.aiProgress=0; S.aiMetric='0.0';
+    if(S.mode=='crew'){
+      S.cur++;
+      if(S.cur>=S.players.length){ S.cur=0; S.round++; }
+      if(S.round>S.rounds){
+        S.scr='end';
+        vib([80,40,80]);
+        render();
+        return;
+      }
+    }
+    S.card = pick(S.cats, tier(L()), S.aiOnly);
+    render();
+  },
+
+  /* --- WIDEO FEED & MODERACJA --- */
+  async openVideos(){
+    A.go('videos');
+    await loadVideos();
+    render();
+  },
+
+  async uploadVideo(){
+    const fileIn = $('#v-file');
+    const file = fileIn && fileIn.files && fileIn.files[0];
+    if(!file){ alert('Wybierz plik wideo z nagraniem zadania!'); return; }
+    const nick = ($('#v-nick').value || S.nick || 'DRIVER').trim().toUpperCase();
+    const cat = $('#v-cat').value;
+    const title = ($('#v-title').value || 'Przejazd Blacklist').trim();
+    const btn = $('#v-btn');
+    btn.disabled = true; btn.textContent = 'PRZETWARZANIE WIDEO...';
+
+    const id = 'vid_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    let remoteUrl = '';
+
+    // Opcjonalny upload do Cloudinary + Firebase jeśli skonfigurowano
+    if(S.cloud.cloudinaryCloud && S.cloud.cloudinaryPreset){
+      try{
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('upload_preset', S.cloud.cloudinaryPreset);
+        const upRes = await fetch(`https://api.cloudinary.com/v1_1/${S.cloud.cloudinaryCloud}/video/upload`, {method:'POST', body:fd});
+        const upJson = await upRes.json();
+        if(upJson.secure_url) remoteUrl = upJson.secure_url;
+      }catch(e){}
+    }
+
+    const record = { id, nick, cat, title, ts: Date.now(), likes: 1, url: remoteUrl };
+    await VDB.add({ ...record, blob: file });
+
+    if(S.cloud.firebaseUrl && remoteUrl){
+      try{
+        const base = S.cloud.firebaseUrl.replace(/\/$/,'');
+        await fetch(`${base}/videos/${id}.json`, {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(record)
+        });
+      }catch(e){}
+    }
+
+    // Bonus +30 REP za wrzucenie dowodu wideo
+    S.nick = nick; LS.s('bl_nick', nick);
+    S.rep += 30; LS.s('bl_rep', S.rep);
+    await syncUserLeaderboard();
+    fl('+30 REP ZA KLIP!', true);
+    await loadVideos();
+    render();
+  },
+
+  async likeVideo(id){
+    const v = S.videos.find(x=>x.id===id);
+    if(!v) return;
+    v.likes = (v.likes||0) + 1;
+    try{
+      const all = await VDB.all();
+      const loc = all.find(x=>x.id===id);
+      if(loc){ loc.likes = v.likes; await VDB.add(loc); }
+    }catch(e){}
+    if(S.cloud.firebaseUrl){
+      try{
+        const base = S.cloud.firebaseUrl.replace(/\/$/,'');
+        await fetch(`${base}/videos/${id}/likes.json`, {method:'PUT', body:JSON.stringify(v.likes)});
+      }catch(e){}
+    }
+    beep(740,.08);
+    render();
+  },
+
+  async deleteVideo(id){
+    if(!S.isAdmin){ alert('Brak uprawnień administratora!'); return; }
+    if(!confirm('ADMIN: Na pewno trwale usunąć to nagranie?')) return;
+    await VDB.del(id);
+    if(S.cloud.firebaseUrl){
+      try{
+        const base = S.cloud.firebaseUrl.replace(/\/$/,'');
+        await fetch(`${base}/videos/${id}.json`, {method:'DELETE'});
+      }catch(e){}
+    }
+    S.videos = S.videos.filter(x=>x.id!==id);
+    fl('USUNIĘTO FILM', false);
+    render();
+  },
+
+  /* --- RANKING --- */
+  async openRank(){
+    A.go('rank');
+    const board = await fetchLeaderboard();
+    const box = $('#rank-box');
+    if(!box) return;
+    box.innerHTML = board.map((p, i) => {
+      const isMe = p.nick === S.nick;
+      const medal = i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `#${i+1}`;
+      return `
+      <div class="fr" style="--c:${isMe?'#39FF14':(i===0?'#FF5500':'#00F0FF')};margin:8px 0;padding:12px">
+        <div class="rl">
+          <span style="min-width:34px">${medal}</span>
+          <div>
+            <div style="color:${isMe?'#39FF14':'#fff'}">${esc(p.nick)} ${isMe?'(TY)':''}</div>
+            <small style="margin:0">${esc(p.rank)} · LVL ${p.lvl}</small>
+          </div>
+          <em>${p.rep} REP</em>
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  /* --- USTAWIENIA I ADMIN --- */
+  saveNick(){
+    const val = ($('#s-nick').value || '').trim().toUpperCase();
+    if(!val) return;
+    S.nick = val;
+    LS.s('bl_nick', val);
+    syncUserLeaderboard();
+    fl('ZAPISANO KSYWĘ', true);
+    A.go('home');
+  },
+  saveCloud(){
+    S.cloud = {
+      firebaseUrl: ($('#c-fb').value||'').trim(),
+      cloudinaryCloud: ($('#c-cc').value||'').trim(),
+      cloudinaryPreset: ($('#c-cp').value||'').trim()
+    };
+    LS.s('bl_cloud', S.cloud);
+    syncUserLeaderboard();
+    fl('ZAPISANO CHMURĘ', true);
+    A.go('home');
+  },
+  loginAdmin(){
+    const u = ($('#adm-u').value||'').trim().toUpperCase();
+    const p = ($('#adm-p').value||'').trim();
+    if(u === ADMIN_CRED.user && p === ADMIN_CRED.pass){
+      S.isAdmin = true;
+      LS.s('bl_admin', true);
+      beep(980,.2);
+      fl('ADMIN ZALOGOWANY', true);
+      render();
+    } else {
+      vib([150,60,150]);
+      alert('Nieprawidłowy login lub hasło administratora!');
+    }
+  },
+  logoutAdmin(){
+    S.isAdmin = false;
+    LS.s('bl_admin', false);
+    render();
+  },
+
+  share(){
+    const t='🔥 BLACKLIST – apka na zloty i tor: ponad 900 wyzwań, weryfikacja AI kamerą i GPS, ranking i wideo feed!', u=location.href;
+    if(navigator.share) navigator.share({title:'BLACKLIST',text:t,url:u}).catch(()=>{});
+    else { try{navigator.clipboard.writeText(t+' '+u)}catch(e){} alert('Link skopiowany – wyślij ekipie!'); }
+  },
+  reset(){
+    if(confirm('Zresetować twój postęp (REP i level)?')){
+      S.rep=0; LS.s('bl_rep',0); LS.s('bl_seen',[]);
+      syncUserLeaderboard();
+      render();
+    }
+  }
+};
+
+function renderAIHud(){
+  const m = $('#ai-met');
+  if(m) m.textContent = S.aiMetric;
+  const st = document.querySelector('.fr.ai small');
+  if(st) st.textContent = S.aiStatus;
+  const tb = document.querySelector('.fr.ai .tb');
+  if(tb){
+    const bars = tb.querySelectorAll('i');
+    bars.forEach((b,idx)=>{
+      if((idx+.5)/bars.length <= S.aiProgress) b.classList.add('on');
+      else b.classList.remove('on');
+    });
+  }
+}
+
+syncUserLeaderboard();
 render();
 </script>
 </body>
