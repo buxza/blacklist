@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ PLACÓW
+   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ DUŻYCH PLACÓW (50 KM)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -158,7 +158,7 @@ let S = {
   placesError: null,
   userLat: null,
   userLon: null,
-  gpsPermState: 'prompt', // 'prompt' | 'granted' | 'denied' | 'requesting'
+  gpsPermState: 'prompt',
   gpsMsg: ''
 };
 
@@ -173,7 +173,7 @@ async function checkInitialGpsPermission(){
   if(navigator.permissions && navigator.permissions.query){
     try{
       const status = await navigator.permissions.query({name: 'geolocation'});
-      S.gpsPermState = status.state; // 'granted', 'prompt', 'denied'
+      S.gpsPermState = status.state;
       if(status.state === 'granted'){
         S.gpsMsg = 'Lokalizacja jest już aktywna. Możesz wjeżdżać!';
       } else if(status.state === 'denied'){
@@ -222,7 +222,24 @@ async function askLocationOnStart(){
   );
 }
 
-/* ===== SZUKANIE DUŻYCH PLACÓW (Overpass / OSM) ===== */
+/* ===== OBLICZANIE POWIERZCHNI PLACU W M² ===== */
+function calcPolygonArea(geom){
+  if(!geom || geom.length < 3) return 0;
+  const R = 6378137;
+  let area = 0;
+  for(let i = 0; i < geom.length; i++){
+    const p1 = geom[i];
+    const p2 = geom[(i + 1) % geom.length];
+    const x1 = (p1.lon * Math.PI / 180) * R * Math.cos(p1.lat * Math.PI / 180);
+    const y1 = (p1.lat * Math.PI / 180) * R;
+    const x2 = (p2.lon * Math.PI / 180) * R * Math.cos(p2.lat * Math.PI / 180);
+    const y2 = (p2.lat * Math.PI / 180) * R;
+    area += (x1 * y2 - x2 * y1);
+  }
+  return Math.abs(area / 2);
+}
+
+/* ===== SZUKANIE DUŻYCH PLACÓW (Overpass / OSM - MIN. 2500 M², ZASIĘG 50 KM) ===== */
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371e3, toRad = d => d * Math.PI / 180;
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
@@ -235,18 +252,18 @@ function formatDist(m){
   return (m/1000).toFixed(1) + ' km';
 }
 
-async function findNearbyPlacards(lat, lon, radiusKm = 20){
+async function findNearbyPlacards(lat, lon, radiusKm = 50){
   const radius = Math.round(radiusKm * 1000);
   const query = `
-[out:json][timeout:25];
+[out:json][timeout:30];
 (
   way["amenity"="parking"](around:${radius},${lat},${lon});
-  relation["amenity"="parking"](around:${radius},${lat},${lon});
-  way["landuse"="industrial"](around:${radius},${lat},${lon});
-  way["landuse"="commercial"]["name"~"parking|park|plac|lot",i](around:${radius},${lat},${lon});
-  way["highway"="service"]["service"="parking_aisle"](around:${radius},${lat},${lon});
+  way["amenity"="driver_training"](around:${radius},${lat},${lon});
+  way["leisure"="track"](around:${radius},${lat},${lon});
+  way["aeroway"~"runway|apron"](around:${radius},${lat},${lon});
+  way["landuse"="industrial"]["surface"~"asphalt|concrete|paved"](around:${radius},${lat},${lon});
 );
-out center tags;
+out geom tags;
 `;
   const url = 'https://overpass-api.de/api/interpreter';
   const res = await fetch(url, {
@@ -254,7 +271,7 @@ out center tags;
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: 'data=' + encodeURIComponent(query)
   });
-  if(!res.ok) throw new Error('Overpass error ' + res.status);
+  if(!res.ok) throw new Error('Błąd serwera map (' + res.status + ')');
   const data = await res.json();
   const elements = data.elements || [];
 
@@ -262,41 +279,62 @@ out center tags;
   const seen = new Set();
 
   for(const el of elements){
-    const c = el.center || (el.lat && el.lon ? {lat: el.lat, lon: el.lon} : null);
-    if(!c) continue;
-    const key = c.lat.toFixed(4) + ',' + c.lon.toFixed(4);
+    const geom = el.geometry;
+    if(!geom || geom.length < 3) continue;
+
+    const area = calcPolygonArea(geom);
+    if(area < 2500) continue; // Odrzucamy małe parkingi poniżej 2500 m²
+
+    let sumLat = 0, sumLon = 0;
+    geom.forEach(pt => { sumLat += pt.lat; sumLon += pt.lon; });
+    const cLat = sumLat / geom.length;
+    const cLon = sumLon / geom.length;
+
+    const key = cLat.toFixed(3) + ',' + cLon.toFixed(3);
     if(seen.has(key)) continue;
     seen.add(key);
 
     const tags = el.tags || {};
-    const name = tags.name || tags['name:pl'] || tags.operator || 
-      (tags.amenity === 'parking' ? 'Parking' : 
-       tags.landuse === 'industrial' ? 'Teren przemysłowy' : 'Otwarty plac');
+    const surfaceMap = {
+      asphalt: 'Asfalt',
+      concrete: 'Beton',
+      paved: 'Utwardzony',
+      paving_stones: 'Kostka',
+      gravel: 'Szuter'
+    };
+    const surface = surfaceMap[tags.surface] || 'Utwardzony / brak danych';
 
-    let score = 0;
-    if(tags.amenity === 'parking') score += 2;
-    if(tags.landuse === 'industrial') score += 3;
-    if(tags.access === 'private' || tags.access === 'customers') score += 1;
-    if(tags.parking === 'surface' || tags.parking === 'multi-storey') score += 1;
-    if(!tags.name) score += 1;
+    let typeLabel = 'Duży parking';
+    if(tags.leisure === 'track') typeLabel = '🏁 Tor / obiekt moto';
+    else if(tags.aeroway) typeLabel = '✈️ Pas / płyta lotniskowa';
+    else if(tags.amenity === 'driver_training') typeLabel = '🎯 Plac manewrowy';
+    else if(tags.landuse === 'industrial') typeLabel = '🏭 Plac przemysłowy';
 
-    const dist = haversine(lat, lon, c.lat, c.lon);
+    const name = tags.name || tags['name:pl'] || tags.operator || typeLabel;
+    const dist = haversine(lat, lon, cLat, cLon);
+
+    let score = Math.min(area / 2000, 15);
+    if(tags.leisure === 'track' || tags.aeroway || tags.amenity === 'driver_training') score += 10;
+    if(!tags.name) score += 3;
+    if(tags.access === 'no' || tags.access === 'private') score -= 5;
+
     places.push({
       id: el.type + '/' + el.id,
       name,
-      lat: c.lat,
-      lon: c.lon,
+      lat: cLat,
+      lon: cLon,
       dist,
+      area: Math.round(area),
+      surface,
       score,
-      type: tags.amenity || tags.landuse || 'place',
-      tags
+      typeLabel
     });
   }
 
-  places.sort((a,b) => {
-    const dDiff = a.dist - b.dist;
-    if(Math.abs(dDiff) > 800) return dDiff;
-    return (b.score - a.score) || dDiff;
+  places.sort((a, b) => {
+    const rankA = a.score - (a.dist / 3500);
+    const rankB = b.score - (b.dist / 3500);
+    return rankB - rankA;
   });
 
   return places.slice(0, 5);
@@ -424,7 +462,7 @@ intro:()=>{
         </span>
       </div>
       <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS na start, aby odblokować <b>wyszukiwarkę pustych placów</b> w Twojej okolicy oraz pomiary prędkości <b>AI Speed Run</b>.
+        Włącz GPS na start, aby odblokować <b>wyszukiwarkę dużych placów (do 50 km)</b> oraz pomiary prędkości <b>AI Speed Run</b>.
       </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       
@@ -459,7 +497,7 @@ ${prof()}
 <button class="btn cy" onclick="requestPermissionsAndStart('crew', false)">CREW BATTLE<small>2–4 graczy</small></button>
 <button class="btn w" onclick="A.findPlaces()" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
   📍 ZNAJDŹ PLAC ${S.gpsPermState==='granted' ? '(GPS GOTOWY)' : ''}
-  <small>Top 5 dużych / odludnych miejsc w okolicy</small>
+  <small>Top 5 dużych placów (min. 2500 m²) w promieniu 50 km</small>
 </button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
@@ -524,7 +562,7 @@ places:()=>{
     <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 SZUKAM PLACÓW</h2></div>
     <div class=fr style="text-align:center;padding:30px 16px">
       <b class=or style="font-size:22px">Skanuję okolicę...</b>
-      <p style="color:#9aa;margin-top:10px;font-size:13px">Szukam dużych parkingów i odludnych terenów w promieniu ~20 km</p>
+      <p style="color:#9aa;margin-top:10px;font-size:13px">Szukam dużych placów (min. 2500 m²), torów i lotnisk w promieniu 50 km</p>
     </div>`;
   }
   if(S.placesError){
@@ -540,13 +578,13 @@ places:()=>{
     return `
     <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 PLACE</h2></div>
     <div class=fr>
-      <p style="color:#9aa">Nic nie znaleziono w okolicy. Spróbuj w innym miejscu lub zwiększ zasięg.</p>
+      <p style="color:#9aa">Nie znaleziono dużych placów (min. 2500 m²) w promieniu 50 km.</p>
       <button class="btn cy" onclick="A.findPlaces()">SZUKAJ PONOWNIE</button>
     </div>`;
   }
   return `
-  <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 TOP 5 PLACÓW</h2></div>
-  <p style="color:#9aa;font-size:12px;margin:4px 0 10px">Najbliższe duże / mniej uczęszczane miejsca</p>
+  <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 TOP 5 PLACÓW (50 KM)</h2></div>
+  <p style="color:#9aa;font-size:12px;margin:4px 0 10px">Duże otwarte przestrzenie (min. 2500 m²) w promieniu 50 km</p>
   ${S.places.map((p,i)=>`
     <div class=fr style="padding:12px 14px">
       <div class=row>
@@ -554,7 +592,9 @@ places:()=>{
         <span style="font:700 14px sans-serif;flex:1;margin:0 8px">${esc(p.name)}</span>
         <em style="color:#00F0FF">${formatDist(p.dist)}</em>
       </div>
-      <small style="color:#778;margin:4px 0 8px;display:block">${p.type === 'industrial' ? 'Teren przemysłowy' : p.type === 'parking' ? 'Parking' : 'Otwarty teren'}</small>
+      <small style="color:#aaa;margin:4px 0 8px;display:block">
+        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · ${esc(p.surface)}
+      </small>
       <div class=pills>
         <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
         <button onclick="A.copyCoords(${p.lat},${p.lon})" style="flex:1">📋 KOPIUJ</button>
@@ -660,7 +700,7 @@ const A = {
       S.userLon = pos.coords.longitude;
       S.gpsPermState = 'granted';
 
-      const list = await findNearbyPlacards(S.userLat, S.userLon, 22);
+      const list = await findNearbyPlacards(S.userLat, S.userLon, 50);
       S.places = list;
       S.placesLoading = false;
       render();
