@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ DUŻYCH PLACÓW (50 KM)
+   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ SPOTÓW (25 / 50 / >50 KM)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -153,9 +153,11 @@ let S = {
   aiProgress: 0,
   aiMetric: '0.0',
   aiActive: false,
-  places: [],
+  places: LS.g('bl_saved_places', []),
+  placesRadius: 25,
   placesLoading: false,
   placesError: null,
+  placesStatusMsg: '',
   userLat: null,
   userLon: null,
   gpsPermState: 'prompt',
@@ -222,24 +224,7 @@ async function askLocationOnStart(){
   );
 }
 
-/* ===== OBLICZANIE POWIERZCHNI PLACU W M² ===== */
-function calcPolygonArea(geom){
-  if(!geom || geom.length < 3) return 0;
-  const R = 6378137;
-  let area = 0;
-  for(let i = 0; i < geom.length; i++){
-    const p1 = geom[i];
-    const p2 = geom[(i + 1) % geom.length];
-    const x1 = (p1.lon * Math.PI / 180) * R * Math.cos(p1.lat * Math.PI / 180);
-    const y1 = (p1.lat * Math.PI / 180) * R;
-    const x2 = (p2.lon * Math.PI / 180) * R * Math.cos(p2.lat * Math.PI / 180);
-    const y2 = (p2.lat * Math.PI / 180) * R;
-    area += (x1 * y2 - x2 * y1);
-  }
-  return Math.abs(area / 2);
-}
-
-/* ===== SZUKANIE DUŻYCH PLACÓW (Overpass / OSM - MIN. 2500 M², ZASIĘG 50 KM) ===== */
+/* ===== OBLICZANIE POWIERZCHNI Z BOUNDING BOX (LEKKIE, BEZ ERROR 502) ===== */
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371e3, toRad = d => d * Math.PI / 180;
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
@@ -247,97 +232,186 @@ function haversine(lat1, lon1, lat2, lon2){
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+function calcBoundsArea(bounds){
+  if(!bounds) return 0;
+  const {minlat, minlon, maxlat, maxlon} = bounds;
+  const midLat = (minlat + maxlat) / 2;
+  const midLon = (minlon + maxlon) / 2;
+  const height = haversine(minlat, midLon, maxlat, midLon);
+  const width = haversine(midLat, minlon, midLat, maxlon);
+  // Współczynnik wypełnienia ~0.65 dla prostokąta otaczającego nieregularny wielokąt
+  return height * width * 0.65;
+}
+
 function formatDist(m){
   if(m < 1000) return Math.round(m) + ' m';
   return (m/1000).toFixed(1) + ' km';
 }
 
-async function findNearbyPlacards(lat, lon, radiusKm = 50){
+// Czarna lista słów oznaczających duży przypał (markety, centra, urzędy, osiedla)
+const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln/i;
+
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+];
+
+async function fetchOverpassWithFallback(query){
+  let lastErr = null;
+  for(const url of OVERPASS_ENDPOINTS){
+    try{
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 16000);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'data=' + encodeURIComponent(query),
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if(!res.ok){
+        lastErr = new Error(`Serwer ${new URL(url).hostname} zwrócił status ${res.status}`);
+        continue;
+      }
+      return await res.json();
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('Wszystkie serwery map są chwilowo przeciążone.');
+}
+
+async function findNearbyPlacards(lat, lon, radiusKm = 25){
   const radius = Math.round(radiusKm * 1000);
+  // Używamy lekkiego "out bb center tags;" zamiast ciężkiego "out geom;" -> brak błędu 502!
   const query = `
-[out:json][timeout:30];
+[out:json][timeout:18];
 (
   way["amenity"="parking"](around:${radius},${lat},${lon});
   way["amenity"="driver_training"](around:${radius},${lat},${lon});
   way["leisure"="track"](around:${radius},${lat},${lon});
   way["aeroway"~"runway|apron"](around:${radius},${lat},${lon});
-  way["landuse"="industrial"]["surface"~"asphalt|concrete|paved"](around:${radius},${lat},${lon});
+  way["landuse"="industrial"](around:${radius},${lat},${lon});
+  way["landuse"="quarry"](around:${radius},${lat},${lon});
 );
-out geom tags;
+out bb center tags;
 `;
-  const url = 'https://overpass-api.de/api/interpreter';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: 'data=' + encodeURIComponent(query)
-  });
-  if(!res.ok) throw new Error('Błąd serwera map (' + res.status + ')');
-  const data = await res.json();
+  const data = await fetchOverpassWithFallback(query);
   const elements = data.elements || [];
 
   const places = [];
   const seen = new Set();
 
   for(const el of elements){
-    const geom = el.geometry;
-    if(!geom || geom.length < 3) continue;
+    const area = calcBoundsArea(el.bounds);
+    if(area < 1000 || area > 650000) continue;
 
-    const area = calcPolygonArea(geom);
-    if(area < 2500) continue; // Odrzucamy małe parkingi poniżej 2500 m²
+    const tags = el.tags || {};
+    const rawName = (tags.name || '') + ' ' + (tags.operator || '') + ' ' + (tags.description || '');
 
-    let sumLat = 0, sumLon = 0;
-    geom.forEach(pt => { sumLat += pt.lat; sumLon += pt.lon; });
-    const cLat = sumLat / geom.length;
-    const cLon = sumLon / geom.length;
+    if(PRZYPAL_REGEX.test(rawName)) continue;
+    if(tags.access === 'customers' || tags.access === 'private' || tags.access === 'no') continue;
+    if(tags.fee === 'yes') continue;
+    if(tags.parking && ['multi-storey', 'underground', 'street_side', 'lane'].includes(tags.parking)) continue;
 
-    const key = cLat.toFixed(3) + ',' + cLon.toFixed(3);
+    const c = el.center || (el.bounds ? {
+      lat: (el.bounds.minlat + el.bounds.maxlat) / 2,
+      lon: (el.bounds.minlon + el.bounds.maxlon) / 2
+    } : null);
+    if(!c) continue;
+
+    const key = c.lat.toFixed(3) + ',' + c.lon.toFixed(3);
     if(seen.has(key)) continue;
     seen.add(key);
 
-    const tags = el.tags || {};
     const surfaceMap = {
       asphalt: 'Asfalt',
       concrete: 'Beton',
       paved: 'Utwardzony',
       paving_stones: 'Kostka',
-      gravel: 'Szuter'
+      gravel: 'Szuter',
+      dirt: 'Ziemia/Szuter',
+      sand: 'Piasek'
     };
     const surface = surfaceMap[tags.surface] || 'Utwardzony / brak danych';
 
-    let typeLabel = 'Duży parking';
-    if(tags.leisure === 'track') typeLabel = '🏁 Tor / obiekt moto';
-    else if(tags.aeroway) typeLabel = '✈️ Pas / płyta lotniskowa';
-    else if(tags.amenity === 'driver_training') typeLabel = '🎯 Plac manewrowy';
-    else if(tags.landuse === 'industrial') typeLabel = '🏭 Plac przemysłowy';
+    let stealth = 0;
+    let vibeNote = 'Ustronny plac';
+    let typeLabel = 'Plac / Parking na uboczu';
+
+    if(tags.leisure === 'track'){
+      stealth += 25;
+      typeLabel = '🏁 Tor / Obiekt moto';
+      vibeNote = 'Legalny klimat · Zero sąsiadów';
+    } else if(tags.aeroway){
+      stealth += 22;
+      typeLabel = '✈️ Stary pas / Płyta lotniskowa';
+      vibeNote = 'Otwarta przestrzeń · Daleko od domów';
+    } else if(tags.amenity === 'driver_training'){
+      stealth += 18;
+      typeLabel = '🎯 Plac manewrowy';
+      vibeNote = 'Stworzony do kręcenia';
+    } else if(tags.landuse === 'quarry'){
+      stealth += 16;
+      typeLabel = '🪨 Żwirownia / Wyrobisko';
+      vibeNote = 'Totalne odludzie · Szuter';
+    } else if(tags.landuse === 'industrial'){
+      stealth += 14;
+      typeLabel = '🏭 Baza / Teren przemysłowy';
+      vibeNote = 'Po godzinach pusto · Brak mieszkańców';
+    } else {
+      stealth += 6;
+      if(tags.parking === 'forest' || tags.forestry){
+        stealth += 12;
+        typeLabel = '🌲 Leśny plac / Parking';
+        vibeNote = 'W lesie · Daleko od zabudowań';
+      }
+    }
+
+    if(!tags.name && !tags.operator){
+      stealth += 8;
+      if(vibeNote === 'Ustronny plac') vibeNote = 'Bezimienny plac · Brak ochrony';
+    }
+
+    if(area >= 2500 && area <= 35000) stealth += 4;
 
     const name = tags.name || tags['name:pl'] || tags.operator || typeLabel;
-    const dist = haversine(lat, lon, cLat, cLon);
+    const dist = haversine(lat, lon, c.lat, c.lon);
 
-    let score = Math.min(area / 2000, 15);
-    if(tags.leisure === 'track' || tags.aeroway || tags.amenity === 'driver_training') score += 10;
-    if(!tags.name) score += 3;
-    if(tags.access === 'no' || tags.access === 'private') score -= 5;
+    let stealthBadge = '🟡 ŚREDNI PRZYPAŁ';
+    let stealthColor = '#FFD400';
+    if(stealth >= 20){
+      stealthBadge = '🟢 ZERO PRZYPAŁU';
+      stealthColor = '#39FF14';
+    } else if(stealth >= 13){
+      stealthBadge = '🟢 NISKI PRZYPAŁ';
+      stealthColor = '#39FF14';
+    }
 
     places.push({
       id: el.type + '/' + el.id,
       name,
-      lat: cLat,
-      lon: cLon,
+      lat: c.lat,
+      lon: c.lon,
       dist,
       area: Math.round(area),
       surface,
-      score,
+      stealth,
+      stealthBadge,
+      stealthColor,
+      vibeNote,
       typeLabel
     });
   }
 
   places.sort((a, b) => {
-    const rankA = a.score - (a.dist / 3500);
-    const rankB = b.score - (b.dist / 3500);
-    return rankB - rankA;
+    const scoreA = a.stealth - (a.dist / 3500);
+    const scoreB = b.stealth - (b.dist / 3500);
+    return scoreB - scoreA;
   });
 
-  return places.slice(0, 5);
+  return places.slice(0, 8);
 }
 
 let tk = 0;
@@ -462,7 +536,7 @@ intro:()=>{
         </span>
       </div>
       <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS na start, aby odblokować <b>wyszukiwarkę dużych placów (do 50 km)</b> oraz pomiary prędkości <b>AI Speed Run</b>.
+        Włącz GPS na start, aby wyszukiwać <b>bezprzypałowe miejscówki (25 km / +25 km / >50 km)</b> oraz mierzyć prędkość <b>AI Speed Run</b>.
       </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       
@@ -495,9 +569,9 @@ ${prof()}
 <button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
 <button class="btn cy" onclick="requestPermissionsAndStart('crew', false)">CREW BATTLE<small>2–4 graczy</small></button>
-<button class="btn w" onclick="A.findPlaces()" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
-  📍 ZNAJDŹ PLAC ${S.gpsPermState==='granted' ? '(GPS GOTOWY)' : ''}
-  <small>Top 5 dużych placów (min. 2500 m²) w promieniu 50 km</small>
+<button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
+  🥷 ZNAJDŹ BEZPRZYPAŁOWY PLAC ${S.places.length ? `(${S.places.length} ZAPISANE)` : ''}
+  <small>Szukaj w promieniu 25 km z opcją +25 km oraz >50 km</small>
 </button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
@@ -557,42 +631,56 @@ ${!S.isAdmin?`<div class=fr><input class=up id="adm-u" placeholder="LOGIN"><inpu
 `,
 
 places:()=>{
-  if(S.placesLoading){
-    return `
-    <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 SZUKAM PLACÓW</h2></div>
-    <div class=fr style="text-align:center;padding:30px 16px">
-      <b class=or style="font-size:22px">Skanuję okolicę...</b>
-      <p style="color:#9aa;margin-top:10px;font-size:13px">Szukam dużych placów (min. 2500 m²), torów i lotnisk w promieniu 50 km</p>
-    </div>`;
-  }
-  if(S.placesError){
-    return `
-    <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 PLACE</h2></div>
-    <div class=fr>
-      <b style="color:#FF1744">Błąd lokalizacji</b>
-      <p style="margin:8px 0;color:#ccc">${esc(S.placesError)}</p>
-      <button class="btn cy" onclick="A.findPlaces()">SPRÓBUJ PONOWNIE</button>
-    </div>`;
-  }
-  if(!S.places.length){
-    return `
-    <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 PLACE</h2></div>
-    <div class=fr>
-      <p style="color:#9aa">Nie znaleziono dużych placów (min. 2500 m²) w promieniu 50 km.</p>
-      <button class="btn cy" onclick="A.findPlaces()">SZUKAJ PONOWNIE</button>
-    </div>`;
-  }
+  const rangeBar = `
+  <div class="fr" style="--c:#00F0FF;padding:10px 12px;margin-bottom:10px">
+    <div class="row" style="margin-bottom:8px">
+      <small style="color:#00F0FF;margin:0">ZASIĘG SKANOWANIA: <b>${S.placesRadius} KM</b></small>
+      <small style="color:#39FF14;margin:0">ZAPISANE: <b>${S.places.length}</b></small>
+    </div>
+    <div class="pills">
+      <button class="${S.placesRadius===25?'on':''}" onclick="A.findPlaces(25)" style="font-size:13px;padding:8px 4px">25 KM</button>
+      <button class="${S.placesRadius===50?'on':''}" onclick="A.findPlaces(50)" style="font-size:13px;padding:8px 4px">+25 KM (50)</button>
+      <button class="${S.placesRadius===75?'on':''}" onclick="A.findPlaces(75)" style="font-size:13px;padding:8px 4px">&gt;50 KM (75)</button>
+    </div>
+  </div>`;
+
   return `
-  <div class=top><button class=x onclick="A.go('home')">‹</button><h2>📍 TOP 5 PLACÓW (50 KM)</h2></div>
-  <p style="color:#9aa;font-size:12px;margin:4px 0 10px">Duże otwarte przestrzenie (min. 2500 m²) w promieniu 50 km</p>
+  <div class=top>
+    <button class=x onclick="A.go('home')">‹</button>
+    <h2 style="font-size:24px;margin:0;flex:1">🥷 MIEJSCÓWKI</h2>
+    ${S.places.length ? `<button class=x style="width:auto;padding:0 10px;color:#FF1744;box-shadow:inset 0 0 0 1.5px #FF1744;font-size:11px" onclick="A.clearPlaces()">WYCZYŚĆ</button>` : ''}
+  </div>
+  ${rangeBar}
+  ${S.placesLoading ? `
+    <div class=fr style="text-align:center;padding:24px 16px">
+      <b class=or style="font-size:20px">Skanuję promień ${S.placesRadius} km...</b>
+      <p style="color:#9aa;margin-top:8px;font-size:12px">Dopisywanie nowych ustronnych spotów bez usuwania zapisanych...</p>
+    </div>
+  ` : ''}
+  ${S.placesError ? `
+    <div class=fr style="--c:#FF1744">
+      <b style="color:#FF1744">Komunikat GPS / Map</b>
+      <p style="margin:6px 0;color:#ccc;font-size:13px">${esc(S.placesError)}</p>
+      <button class="btn cy" onclick="A.findPlaces(${S.placesRadius})">SPRÓBUJ PONOWNIE</button>
+    </div>
+  ` : ''}
+  ${!S.places.length && !S.placesLoading ? `
+    <div class=fr>
+      <p style="color:#9aa;font-size:13px">Brak zapisanych spotów w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej, aby poszerzyć zasięg.</p>
+    </div>
+  ` : ''}
   ${S.places.map((p,i)=>`
-    <div class=fr style="padding:12px 14px">
+    <div class=fr style="--c:${p.stealthColor};padding:12px 14px">
       <div class=row>
-        <b style="color:#39FF14">#${i+1}</b>
+        <b style="color:${p.stealthColor}">#${i+1}</b>
         <span style="font:700 14px sans-serif;flex:1;margin:0 8px">${esc(p.name)}</span>
         <em style="color:#00F0FF">${formatDist(p.dist)}</em>
       </div>
-      <small style="color:#aaa;margin:4px 0 8px;display:block">
+      <div class=row style="margin:6px 0 4px">
+        <span class=tag style="background:${p.stealthColor};font-size:10px">${p.stealthBadge}</span>
+        <small style="color:#ddd;margin:0">${esc(p.vibeNote)}</small>
+      </div>
+      <small style="color:#889;margin:4px 0 8px;display:block">
         ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · ${esc(p.surface)}
       </small>
       <div class=pills>
@@ -601,7 +689,6 @@ places:()=>{
       </div>
     </div>
   `).join('')}
-  <button class="btn cy" onclick="A.findPlaces()" style="margin-top:8px">🔄 ODŚWIEŻ LISTĘ</button>
   `;
 }
 };
@@ -675,10 +762,18 @@ const A = {
   loginAdmin(){ if($('#adm-u').value==ADMIN_CRED.user && $('#adm-p').value==ADMIN_CRED.pass){ S.isAdmin=true; render(); } else alert('Błędne hasło'); },
   logoutAdmin(){ S.isAdmin=false; render(); },
 
-  async findPlaces(){
+  clearPlaces(){
+    S.places = [];
+    LS.s('bl_saved_places', []);
+    fl('WYCZYSZCZONO', false);
+    render();
+  },
+
+  async findPlaces(radiusKm = 25){
+    S.placesRadius = radiusKm;
     S.placesLoading = true;
     S.placesError = null;
-    S.places = [];
+    // NIE usuwamy S.places — dotychczasowe miejsca zostają na ekranie podczas skanowania!
     A.go('places');
 
     if(!navigator.geolocation){
@@ -689,19 +784,42 @@ const A = {
     }
 
     try{
-      const pos = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 60000
+      // Jeśli mamy świeżą pozycję z ostatnich 2 minut, użyj jej od razu bez czekania
+      if(!S.userLat || !S.userLon){
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 120000
+          });
         });
-      });
-      S.userLat = pos.coords.latitude;
-      S.userLon = pos.coords.longitude;
-      S.gpsPermState = 'granted';
+        S.userLat = pos.coords.latitude;
+        S.userLon = pos.coords.longitude;
+        S.gpsPermState = 'granted';
+      }
 
-      const list = await findNearbyPlacards(S.userLat, S.userLon, 50);
-      S.places = list;
+      const freshList = await findNearbyPlacards(S.userLat, S.userLon, radiusKm);
+
+      // Scalanie nowych miejsc z dotychczas zapisanymi (bez usuwania starych i bez duplikatów)
+      const mapById = new Map();
+      S.places.forEach(p => {
+        // Aktualizuj dystans względem obecnej pozycji
+        p.dist = haversine(S.userLat, S.userLon, p.lat, p.lon);
+        mapById.set(p.id, p);
+      });
+      freshList.forEach(p => {
+        mapById.set(p.id, p);
+      });
+
+      const merged = Array.from(mapById.values());
+      merged.sort((a, b) => {
+        const scoreA = a.stealth - (a.dist / 3500);
+        const scoreB = b.stealth - (b.dist / 3500);
+        return scoreB - scoreA;
+      });
+
+      S.places = merged;
+      LS.s('bl_saved_places', S.places);
       S.placesLoading = false;
       render();
     }catch(e){
@@ -709,7 +827,7 @@ const A = {
       S.placesError = e.code === 1 ? 'Odrzucono dostęp do lokalizacji. Zezwól na GPS w ustawieniach przeglądarki.' :
                       e.code === 2 ? 'Nie udało się ustalić pozycji.' :
                       e.code === 3 ? 'Timeout GPS – spróbuj ponownie.' :
-                      (e.message || 'Nie udało się pobrać listy miejsc.');
+                      (e.message || 'Chwilowe przeciążenie map – spróbuj ponownie.');
       render();
     }
   },
