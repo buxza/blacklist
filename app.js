@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - Z MODUŁEM UPRAWNIEŃ KAMERY, GPS I WYSZUKIWARKĄ ASFALTOWYCH SPOTÓW RWD
+   BLACKLIST APP.JS - WERSJA BETA 0.0.1 (SPOTY RWD + AI TRACK ROUTE & TIMER)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -157,11 +157,20 @@ let S = {
   placesRadius: 25,
   placesLoading: false,
   placesError: null,
-  placesStatusMsg: '',
   userLat: null,
   userLon: null,
   gpsPermState: 'prompt',
-  gpsMsg: ''
+  gpsMsg: '',
+  // STAN MODUŁU AI TRACK (TRASA & TIMER)
+  tracks: LS.g('bl_saved_tracks', []),
+  tracksLoading: false,
+  tracksError: null,
+  activeTrack: null,
+  trackTimerState: 'idle', // idle, waiting_start, running, finished
+  trackStartTime: 0,
+  trackElapsedTime: 0,
+  trackLeaderboard: LS.g('bl_track_lb', []),
+  trackWatchId: null
 };
 
 /* ===== SPRAWDZANIE UPRAWNIEŃ GPS NA START ===== */
@@ -215,16 +224,16 @@ async function askLocationOnStart(){
     (err) => {
       S.gpsPermState = err.code === 1 ? 'denied' : 'prompt';
       S.gpsMsg = err.code === 1
-        ? '⚠️ Odrzucono dostęp. Włącz GPS w ustawieniach strony (ikona kłódki obok adresu) lub wejdź bez lokalizacji.'
-        : '⚠️ Nie udało się złapać sygnału GPS. Możesz spróbować ponownie lub wejść bez lokalizacji.';
+        ? '⚠️ Odrzucono dostęp. Włącz GPS w ustawieniach strony lub wejdź bez lokalizacji.'
+        : '⚠️ Nie udało się złapać sygnału GPS. Spróbuj ponownie lub wejdź bez lokalizacji.';
       beep(220, 0.2);
       render();
     },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
   );
 }
 
-/* ===== OBLICZANIE POWIERZCHNI Z BOUNDING BOX ===== */
+/* ===== OBLICZANIE GEOMETMrii ===== */
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371e3, toRad = d => d * Math.PI / 180;
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
@@ -247,7 +256,6 @@ function formatDist(m){
   return (m/1000).toFixed(1) + ' km';
 }
 
-// Czarna lista słów oznaczających działające obiekty, markety, urzędy, osiedla
 const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln|port lotniczy|lotnisko cywilne|aeroklub|wojskow|jednostk/i;
 
 const OVERPASS_ENDPOINTS = [
@@ -256,19 +264,16 @@ const OVERPASS_ENDPOINTS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
 ];
 
+/* ===== BEZPIECZNY FETCH BEZ BŁĘDU ABORT ===== */
 async function fetchOverpassWithFallback(query){
   let lastErr = null;
   for(const url of OVERPASS_ENDPOINTS){
     try{
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 18000);
       const res = await fetch(url, {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'data=' + encodeURIComponent(query),
-        signal: ctrl.signal
+        body: 'data=' + encodeURIComponent(query)
       });
-      clearTimeout(timer);
       if(!res.ok){
         lastErr = new Error(`Serwer ${new URL(url).hostname} zwrócił status ${res.status}`);
         continue;
@@ -281,22 +286,17 @@ async function fetchOverpassWithFallback(query){
   throw lastErr || new Error('Wszystkie serwery map są chwilowo przeciążone.');
 }
 
+/* ===== WYSZUKIWARKA MIEJSCÓWEK (25/50/75 km) ===== */
 async function findNearbyPlacards(lat, lon, radiusKm = 25){
   const radius = Math.round(radiusKm * 1000);
-  // Zapytanie w 2 krokach w Overpass:
-  // 1) Szuka wyłącznie asfaltowych/utwardzonych placów, opuszczonych obiektów, placów manewrowych i stref przemysłowych (bez działających lotnisk i szutru).
-  // 2) Odejmuje wszystkie spoty, które leżą w promieniu 450 m od wiosek, osiedli lub domów mieszkalnych!
   const query = `
-[out:json][timeout:20];
+[out:json][timeout:25];
 (
   way["amenity"="parking"]["surface"="asphalt"](around:${radius},${lat},${lon});
   way["amenity"="driver_training"]["surface"!~"gravel|dirt|sand|grass|unpaved"](around:${radius},${lat},${lon});
   way["landuse"="industrial"]["surface"="asphalt"](around:${radius},${lat},${lon});
   way["abandoned:amenity"="parking"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
   way["disused:amenity"="parking"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
-  way["abandoned:aeroway"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
-  way["disused:aeroway"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
-  way["abandoned:landuse"="industrial"](around:${radius},${lat},${lon});
   way["highway"="turning_circle"]["surface"="asphalt"](around:${radius},${lat},${lon});
 )->.candidates;
 
@@ -319,30 +319,12 @@ way.candidates(around:450, .populated)->.near_homes;
 
   for(const el of elements){
     const tags = el.tags || {};
-
-    // Odrzucamy cokolwiek z nieasfaltową/nieutwardzoną nawierzchnią
     if(tags.surface && !['asphalt', 'paved'].includes(tags.surface)) continue;
-
-    // Odrzucamy działające lotniska i czynne obiekty lotnicze
-    if(tags.aeroway && !tags['abandoned:aeroway'] && !tags['disused:aeroway']) continue;
-
     const area = calcBoundsArea(el.bounds);
-    // Wystarczy 450 m² (np. 21x21 m — w sam raz żeby zakręcić bączka RWD) aż do 350 000 m²
     if(area < 450 || area > 350000) continue;
 
     const rawName = (tags.name || '') + ' ' + (tags.operator || '') + ' ' + (tags.description || '');
     if(PRZYPAL_REGEX.test(rawName)) continue;
-
-    // Pozwalamy na abandoned/disused, ale odrzucamy aktywne prywatne/płatne/dla klientów
-    const isAbandoned = Boolean(
-      tags['abandoned:amenity'] || tags['disused:amenity'] ||
-      tags['abandoned:aeroway'] || tags['disused:aeroway'] ||
-      tags['abandoned:landuse'] || tags.abandoned === 'yes' || tags.disused === 'yes'
-    );
-
-    if(!isAbandoned && (tags.access === 'customers' || tags.access === 'private' || tags.access === 'no')) continue;
-    if(tags.fee === 'yes') continue;
-    if(tags.parking && ['multi-storey', 'underground', 'street_side', 'lane'].includes(tags.parking)) continue;
 
     const c = el.center || (el.bounds ? {
       lat: (el.bounds.minlat + el.bounds.maxlat) / 2,
@@ -354,49 +336,8 @@ way.candidates(around:450, .populated)->.near_homes;
     if(seen.has(key)) continue;
     seen.add(key);
 
-    let stealth = 12; // Bazowo wysoko, bo już odfiltrowaliśmy wioski i domy w promieniu 450-650m!
-    let vibeNote = 'Asfalt na odludziu · Z dala od wiosek';
-    let typeLabel = 'Asfaltowy plac na uboczu';
-
-    if(isAbandoned){
-      stealth += 22;
-      typeLabel = '🏚️ Opuszczony plac / Obiekt';
-      vibeNote = 'Opuszczony asfalt · Zero ruchu i sąsiadów';
-    } else if(tags.amenity === 'driver_training'){
-      stealth += 16;
-      typeLabel = '🎯 Asfaltowy plac manewrowy';
-      vibeNote = 'Równy asfalt · Stworzony pod bączki';
-    } else if(tags.landuse === 'industrial'){
-      stealth += 14;
-      typeLabel = '🏭 Strefa przemysłowa (asfalt)';
-      vibeNote = 'Na uboczu · Po godzinach pusto';
-    } else if(tags.highway === 'turning_circle'){
-      stealth += 12;
-      typeLabel = '🔄 Asfaltowa pętla / Zawrotka';
-      vibeNote = 'Ślepy koniec drogi · Ciasny plac na bączka';
-    } else if(tags.parking === 'forest' || tags.forestry){
-      stealth += 18;
-      typeLabel = '🌲 Leśny plac asfaltowy';
-      vibeNote = 'W głębi lasu · Daleko od zabudowań';
-    }
-
-    // Brak nazwy i operatora = brak ochrony i brak ruchu komercyjnego
-    if(!tags.name && !tags.operator){
-      stealth += 8;
-    }
-
-    // Idealny rozmiar pod bączki RWD (600 m² – 15 000 m²)
-    if(area >= 600 && area <= 15000) stealth += 5;
-
-    const name = tags.name || tags['name:pl'] || tags.operator || typeLabel;
+    const name = tags.name || tags['name:pl'] || tags.operator || 'Asfaltowy plac na uboczu';
     const dist = haversine(lat, lon, c.lat, c.lon);
-
-    let stealthBadge = '🟢 NISKI PRZYPAŁ';
-    let stealthColor = '#39FF14';
-    if(stealth >= 26){
-      stealthBadge = '🟢 TOTALNE ODLUDZIE';
-      stealthColor = '#39FF14';
-    }
 
     places.push({
       id: el.type + '/' + el.id,
@@ -406,21 +347,75 @@ way.candidates(around:450, .populated)->.near_homes;
       dist,
       area: Math.round(area),
       surface: 'Asfalt',
-      stealth,
-      stealthBadge,
-      stealthColor,
-      vibeNote,
-      typeLabel
+      stealthBadge: '🟢 TOTALNE ODLUDZIE [BETA]',
+      stealthColor: '#39FF14',
+      vibeNote: 'Asfalt na odludziu · Z dala od wiosek',
+      typeLabel: 'Plac RWD'
     });
   }
 
-  places.sort((a, b) => {
-    const scoreA = a.stealth - (a.dist / 3500);
-    const scoreB = b.stealth - (b.dist / 3500);
-    return scoreB - scoreA;
-  });
-
+  places.sort((a, b) => a.dist - b.dist);
   return places.slice(0, 10);
+}
+
+/* ===== NOWY MODUŁ AI: WYSZUKIWANIE TRASY / "TORU" (MIN 3 KM, MIN 5 KM OD MIASTA) ===== */
+async function findAiTracks(lat, lon, radiusKm = 30){
+  const radius = Math.round(radiusKm * 1000);
+  // Szukamy dróg asfaltowych w promieniu `radius`, z dala od miast (>5000m od węzłów place city/town)
+  const query = `
+[out:json][timeout:30];
+(
+  way["highway"~"^(secondary|tertiary|unpaved|residential|service)$"]["surface"="asphalt"](around:${radius},${lat},${lon});
+  way["highway"~"^(secondary|tertiary)$"](around:${radius},${lat},${lon});
+)->.roads;
+
+(
+  node["place"~"^(city|town)$"](around:5000, .roads);
+)->.near_towns;
+
+way.roads(around:5000, .near_towns)->.near_city;
+(.roads; - .near_city;)->.isolated_roads;
+
+.isolated_roads out geom tags;
+`;
+  const data = await fetchOverpassWithFallback(query);
+  const elements = data.elements || [];
+
+  const tracks = [];
+  for(const el of elements){
+    if(!el.geometry || el.geometry.length < 3) continue;
+    
+    // Obliczanie długości odcinka/trasy
+    let lengthMeters = 0;
+    for(let i = 0; i < el.geometry.length - 1; i++){
+      const p1 = el.geometry[i];
+      const p2 = el.geometry[i+1];
+      lengthMeters += haversine(p1.lat, p1.lon, p2.lat, p2.lon);
+    }
+
+    // Warunek: co najmniej 3 km (3000 metrów) długości toru
+    if(lengthMeters < 3000 || lengthMeters > 25000) continue;
+
+    const tags = el.tags || {};
+    const startPoint = el.geometry[0];
+    const endPoint = el.geometry[el.geometry.length - 1];
+    const midPoint = el.geometry[Math.floor(el.geometry.length / 2)];
+    const distFromUser = haversine(lat, lon, startPoint.lat, startPoint.lon);
+
+    tracks.push({
+      id: 'track_' + el.id,
+      name: tags.name || tags.ref || `Odległy Tor RWD (${Math.round(lengthMeters/1000)} km)`,
+      length: Math.round(lengthMeters),
+      distFromUser,
+      start: {lat: startPoint.lat, lon: startPoint.lon},
+      mid: {lat: midPoint.lat, lon: midPoint.lon},
+      end: {lat: endPoint.lat, lon: endPoint.lon},
+      geometry: el.geometry
+    });
+  }
+
+  tracks.sort((a, b) => a.distFromUser - b.distFromUser);
+  return tracks.slice(0, 6);
 }
 
 let tk = 0;
@@ -429,6 +424,10 @@ let aiCleanup = null;
 function stopAI(){
   if(aiCleanup){ try{ aiCleanup(); }catch(e){} aiCleanup = null; }
   S.aiActive = false;
+  if(S.trackWatchId !== null){
+    navigator.geolocation.clearWatch(S.trackWatchId);
+    S.trackWatchId = null;
+  }
 }
 
 const L=()=>lvl(S.rep), into=()=>S.rep-cum(L()), prog=()=>L()>=50?1:into()/need(L());
@@ -469,7 +468,6 @@ async function loadVideos(){
   }catch(e){ S.videos = []; }
 }
 
-/* ===== ŻĄDANIE UPRAWNIEŃ KAMERY I GPS PRZY TRYBACH ===== */
 async function requestPermissionsAndStart(mode, aiOnly){
   if(aiOnly){
     try{
@@ -483,7 +481,6 @@ async function requestPermissionsAndStart(mode, aiOnly){
   A.setupReal(mode, aiOnly);
 }
 
-/* ===== WIDOKI AI I GRY ===== */
 const aiBoxHTML = () => {
   const c = S.card;
   if(!c || !c.ai) return '';
@@ -531,8 +528,8 @@ intro:()=>{
   return `
   <div class=c>
     ${LOGO}
-    <div class=wm>BLACKLIST</div>
-    <div class=sub>UPALANIE · DRIFT · AI VISION · GPS</div>
+    <div class=wm>BLACKLIST <span style="font-size:14px;color:#00F0FF;background:#00f0ff22;padding:2px 6px;border-radius:4px">v0.0.1 BETA</span></div>
+    <div class=sub>UPALANIE · DRIFT · AI TRACKS · GPS</div>
     <p class=q>„${S.mot}”</p>
 
     <div class="fr" style="--c:${isGranted ? '#39FF14' : '#00F0FF'};text-align:left;width:100%;max-width:380px;margin:10px 0 14px">
@@ -545,7 +542,7 @@ intro:()=>{
         </span>
       </div>
       <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS na start, aby wyszukiwać <b>asfaltowe, opuszczone spoty na odludziu</b> (z dala od wiosek) oraz mierzyć prędkość <b>AI Speed Run</b>.
+        Włącz GPS, aby wyszukiwać <b>asfaltowe trasy i tory (>3 km, >5 km od miast) [BETA]</b> oraz lokalizować ustronne spoty.
       </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       
@@ -568,7 +565,12 @@ intro:()=>{
 },
 
 home:()=>`
-<div style="text-align:center;padding-top:4px">${LOGO}<div class=wm>BLACKLIST</div><div class=sub>UPALANIE · DRIFT · AI · GPS</div></div>
+<div style="text-align:center;padding-top:4px">
+  ${LOGO}
+  <div class=wm>BLACKLIST</div>
+  <div style="margin:2px 0 6px"><span style="font:italic 800 11px monospace;background:#FF550033;color:#FF5500;padding:2px 8px;border:1px solid #FF5500">APLIKACJA v0.0.1 BETA</span></div>
+  <div class=sub>UPALANIE · DRIFT · AI TRACKS · GPS</div>
+</div>
 ${prof()}
 <div class=nav3>
   <button class=on onclick="A.go('home')">🏎️ GARAŻ</button>
@@ -577,10 +579,13 @@ ${prof()}
 </div>
 <button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
-<button class="btn cy" onclick="requestPermissionsAndStart('crew', false)">CREW BATTLE<small>2–4 graczy</small></button>
+<button class="btn cy" onclick="A.findTracks(30)" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
+  🏁 AI TOR / TRASA (MIN. 3 KM) <span style="font-size:9px;background:#00f0ff22;color:#00F0FF;padding:1px 4px">BETA</span>
+  <small>Szukaj długich asfaltowych tras >5 km od miast z timerem startu</small>
+</button>
 <button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
-  🥷 ZNAJDŹ ASFALT NA BĄCZKA ${S.places.length ? `(${S.places.length} ZAPISANE)` : ''}
-  <small>Opuszczone place z dala od wiosek (25 km / +25 km / &gt;50 km)</small>
+  🥷 ZNAJDŹ ASFALT NA BĄCZKA <span style="font-size:9px;background:#39FF1422;color:#39FF14;padding:1px 4px">BETA</span> ${S.places.length ? `(${S.places.length})` : ''}
+  <small>Szukaj opuszczonych spotów z dala od wiosek (25/50/>75 km)</small>
 </button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
@@ -632,12 +637,106 @@ settings:()=>`
   <b style="color:#39FF14">📍 STATUS GPS: ${S.gpsPermState.toUpperCase()}</b>
   <p style="font-size:12px;color:#9aa;margin:6px 0">Jeśli GPS był odrzucony, kliknij przycisk poniżej, aby ponowić prośbę.</p>
   <button class="btn gr" onclick="askLocationOnStart()">🔄 ODNÓW DOSTĘP DO LOKALIZACJI</button>
+</div>
+<div style="text-align:center;padding:10px;color:#778;font-size:11px">
+  BLACKLIST v0.0.1 (BETA) · Moduł GPS, Tory i Mapy w fazie testowej
 </div>`,
 
 admin:()=>`
 <div class=top><button class=x onclick="A.go('home')">‹</button><h2>🛡️ ADMIN</h2></div>
 ${!S.isAdmin?`<div class=fr><input class=up id="adm-u" placeholder="LOGIN"><input type="password" id="adm-p" placeholder="HASŁO"><button class="btn red" onclick="A.loginAdmin()">ZALOGUJ</button></div>`:`<div class=fr><b style="color:#39FF14">ZALOGOWANY</b><button class="btn red" onclick="A.logoutAdmin()">WYLOGUJ</button></div>`}
 `,
+
+/* ===== EKRAN AI WYSZUKIWANIA TRAS / TORÓW ===== */
+tracks:()=>{
+  const active = S.activeTrack;
+  const lb = S.trackLeaderboard.filter(x => !active || x.trackId === active.id);
+
+  return `
+  <div class=top>
+    <button class=x onclick="A.go('home')">‹</button>
+    <h2 style="font-size:18px;margin:0;flex:1">🏁 AI TOR / TRASA <span style="font-size:10px;color:#00F0FF">[BETA]</span></h2>
+    ${S.tracks.length ? `<button class=x style="width:auto;padding:0 8px;color:#FF1744;box-shadow:inset 0 0 0 1.5px #FF1744;font-size:10px" onclick="A.clearTracks()">RESET</button>` : ''}
+  </div>
+
+  ${active ? `
+    <div class=fr style="--c:#00F0FF;padding:14px">
+      <b style="color:#00F0FF;font-size:16px">🎯 AKTYWNY TOR: ${esc(active.name)}</b>
+      <p style="color:#ccc;font-size:12px;margin:4px 0 10px">Długość: <b>${Math.round(active.length/1000)} km</b> | Odległość startu: <b>${formatDist(active.distFromUser)}</b></p>
+      
+      <div class="hud" style="text-align:center;padding:14px;background:#000d1a">
+        <small style="color:#00F0FF">STATUS POMIARU:</small>
+        <b style="font-size:22px;color:${S.trackTimerState==='running'?'#39FF14':S.trackTimerState==='waiting_start'?'#FFD400':'#fff'}">
+          ${S.trackTimerState==='idle' ? 'PODJEŻDŻAJ NA START' :
+            S.trackTimerState==='waiting_start' ? '⏳ CZEKAM NA START (WJEŻDŻAJ NA PUNKT)' :
+            S.trackTimerState==='running' ? '⏱️ LICZĘ CZAS PRZEJAZDU...' : '🏁 UKOŃCZONO TRASĘ!'}
+        </b>
+        ${S.trackTimerState==='running' ? `<div style="font-size:36px;font-family:monospace;margin:8px 0;color:#39FF14" id="live-timer">0.0 s</div>` : ''}
+      </div>
+
+      <div class=pills style="margin-top:10px">
+        ${S.trackTimerState==='idle' ? `<button class="btn cy on" onclick="A.startTrackTracking()" style="flex:1">🚀 ROZPOCZNIJ POMIAR</button>` : ''}
+        ${S.trackTimerState!=='idle' ? `<button class="btn red" onclick="A.stopTrackTracking()" style="flex:1">❌ ANULUJ</button>` : ''}
+        <button onclick="A.openMaps(${active.start.lat},${active.start.lon})" style="flex:1">🗺️ DOJAZD NA START</button>
+      </div>
+    </div>
+  ` : ''}
+
+  ${S.tracksLoading ? `
+    <div class=fr style="text-align:center;padding:24px 16px">
+      <b class=or style="font-size:20px">AI szuka asfaltowego toru...</b>
+      <p style="color:#9aa;margin-top:8px;font-size:12px">Filtrowanie tras o dł. min. 3 km i oddalonych min. 5 km od miast...</p>
+    </div>
+  ` : ''}
+
+  ${S.tracksError ? `
+    <div class=fr style="--c:#FF1744">
+      <b style="color:#FF1744">Komunikat AI Map</b>
+      <p style="margin:6px 0;color:#ccc;font-size:13px">${esc(S.tracksError)}</p>
+      <button class="btn cy" onclick="A.findTracks(30)">SPRÓBUJ PONOWNIE</button>
+    </div>
+  ` : ''}
+
+  ${!S.tracks.length && !S.tracksLoading ? `
+    <div class=fr style="text-align:center">
+      <p style="color:#9aa;font-size:13px">Brak załadowanych tras. Kliknij przycisk poniżej, aby AI wyszukało asfaltowe odcinki w promieniu 30 km.</p>
+      <button class="btn cy" onclick="A.findTracks(30)">🔍 SZUKAJ TRAS / TORÓW</button>
+    </div>
+  ` : ''}
+
+  ${!active && S.tracks.length ? `
+    <div class=pills style="margin-bottom:10px">
+      <button class="btn cy on" onclick="A.findTracks(30)">🔄 SZUKAJ NOWYCH TRAS</button>
+    </div>
+    ${S.tracks.map((t,i)=>`
+      <div class=fr style="--c:#00F0FF;padding:12px 14px">
+        <div class=row>
+          <b style="color:#00F0FF">#${i+1} ${esc(t.name)}</b>
+          <em style="color:#39FF14">${Math.round(t.length/1000)} km</em>
+        </div>
+        <small style="color:#889;margin:4px 0 8px;display:block">
+          Odległość od Ciebie: <b style="color:#FFD400">${formatDist(t.distFromUser)}</b> · Teren niezabudowany
+        </small>
+        <div class=pills>
+          <button onclick="A.selectTrack('${t.id}')" style="flex:1">🎯 WYBIERJ TEN TOR</button>
+          <button onclick="A.openMaps(${t.start.lat},${t.start.lon})" style="flex:1">🗺️ START</button>
+        </div>
+      </div>
+    `).join('')}
+  ` : ''}
+
+  <div class=fr style="--c:#FFD400;margin-top:16px">
+    <b style="color:#FFD400">🏆 RANKING PRZEJAZDÓW TORU [BETA]</b>
+    ${!lb.length ? `<p style="color:#889;font-size:12px;margin:6px 0">Brak zarejestrowanych czasów przejazdu. Bądź pierwszy!</p>` : ''}
+    ${lb.map((x,i)=>`
+      <div class=row style="padding:6px 0;border-bottom:1px solid #222;font-size:13px">
+        <span><b>#${i+1}</b> ${esc(x.nick)}</span>
+        <span style="color:#39FF14;font-family:monospace"><b>${x.time.toFixed(1)} s</b> (${Math.round(x.length/1000)} km)</span>
+      </div>
+    `).join('')}
+  </div>
+  `;
+},
 
 places:()=>{
   const rangeBar = `
@@ -656,14 +755,14 @@ places:()=>{
   return `
   <div class=top>
     <button class=x onclick="A.go('home')">‹</button>
-    <h2 style="font-size:22px;margin:0;flex:1">🥷 SPOTY RWD</h2>
+    <h2 style="font-size:20px;margin:0;flex:1">🥷 SPOTY RWD <span style="font-size:10px;color:#FFD400">[BETA]</span></h2>
     ${S.places.length ? `<button class=x style="width:auto;padding:0 10px;color:#FF1744;box-shadow:inset 0 0 0 1.5px #FF1744;font-size:11px" onclick="A.clearPlaces()">WYCZYŚĆ</button>` : ''}
   </div>
   ${rangeBar}
   ${S.placesLoading ? `
     <div class=fr style="text-align:center;padding:24px 16px">
-      <b class=or style="font-size:20px">Szukam asfaltu na odludziu (${S.placesRadius} km)...</b>
-      <p style="color:#9aa;margin-top:8px;font-size:12px">Odrzucam wioski, domy, szuter i czynne lotniska. Stare spoty zostają na liście...</p>
+      <b class=or style="font-size:20px">Szukam asfaltu na odludziu [BETA]...</b>
+      <p style="color:#9aa;margin-top:8px;font-size:12px">Filtrowanie wiosek i domów w promieniu ${S.placesRadius} km...</p>
     </div>
   ` : ''}
   ${S.placesError ? `
@@ -675,7 +774,7 @@ places:()=>{
   ` : ''}
   ${!S.places.length && !S.placesLoading ? `
     <div class=fr>
-      <p style="color:#9aa;font-size:13px">Brak zapisanych asfaltowych spotów na odludziu w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej.</p>
+      <p style="color:#9aa;font-size:13px">Brak zapisanych asfaltowych spotów w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej.</p>
     </div>
   ` : ''}
   ${S.places.map((p,i)=>`
@@ -690,7 +789,7 @@ places:()=>{
         <small style="color:#ddd;margin:0">${esc(p.vibeNote)}</small>
       </div>
       <small style="color:#889;margin:4px 0 8px;display:block">
-        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · <b style="color:#00F0FF">ASFALT</b>
+        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · <b style="color:#00F0FF">ASFALT [BETA]</b>
       </small>
       <div class=pills>
         <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
@@ -778,6 +877,14 @@ const A = {
     render();
   },
 
+  clearTracks(){
+    S.tracks = [];
+    S.activeTrack = null;
+    LS.s('bl_saved_tracks', []);
+    fl('WYCZYSZCZONO', false);
+    render();
+  },
+
   async findPlaces(radiusKm = 25){
     S.placesRadius = radiusKm;
     S.placesLoading = true;
@@ -806,7 +913,6 @@ const A = {
       }
 
       const freshList = await findNearbyPlacards(S.userLat, S.userLon, radiusKm);
-
       const mapById = new Map();
       S.places.forEach(p => {
         p.dist = haversine(S.userLat, S.userLon, p.lat, p.lon);
@@ -816,25 +922,134 @@ const A = {
         mapById.set(p.id, p);
       });
 
-      const merged = Array.from(mapById.values());
-      merged.sort((a, b) => {
-        const scoreA = a.stealth - (a.dist / 3500);
-        const scoreB = b.stealth - (b.dist / 3500);
-        return scoreB - scoreA;
-      });
-
-      S.places = merged;
+      S.places = Array.from(mapById.values()).sort((a, b) => a.dist - b.dist);
       LS.s('bl_saved_places', S.places);
       S.placesLoading = false;
       render();
     }catch(e){
       S.placesLoading = false;
-      S.placesError = e.code === 1 ? 'Odrzucono dostęp do lokalizacji. Zezwól na GPS w ustawieniach przeglądarki.' :
-                      e.code === 2 ? 'Nie udało się ustalić pozycji.' :
-                      e.code === 3 ? 'Timeout GPS – spróbuj ponownie.' :
-                      (e.message || 'Chwilowe przeciążenie map – spróbuj ponownie.');
+      S.placesError = e.message || 'Chwilowe przeciążenie map – spróbuj ponownie.';
       render();
     }
+  },
+
+  /* ===== OBSŁUGA WYSZUKIWANIA I POMIARU TORU / TRASY ===== */
+  async findTracks(radiusKm = 30){
+    S.tracksLoading = true;
+    S.tracksError = null;
+    A.go('tracks');
+
+    if(!navigator.geolocation){
+      S.tracksLoading = false;
+      S.tracksError = 'Brak wsparcia GPS.';
+      render();
+      return;
+    }
+
+    try{
+      if(!S.userLat || !S.userLon){
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 120000
+          });
+        });
+        S.userLat = pos.coords.latitude;
+        S.userLon = pos.coords.longitude;
+      }
+
+      const freshTracks = await findAiTracks(S.userLat, S.userLon, radiusKm);
+      S.tracks = freshTracks;
+      LS.s('bl_saved_tracks', S.tracks);
+      S.tracksLoading = false;
+      render();
+    }catch(e){
+      S.tracksLoading = false;
+      S.tracksError = e.message || 'Błąd wyszukiwania trasy. Spróbuj ponownie.';
+      render();
+    }
+  },
+
+  selectTrack(id){
+    const t = S.tracks.find(x => x.id === id);
+    if(!t) return;
+    S.activeTrack = t;
+    S.trackTimerState = 'idle';
+    render();
+  },
+
+  startTrackTracking(){
+    if(!S.activeTrack) return;
+    if(!navigator.geolocation){ alert('Brak GPS'); return; }
+
+    S.trackTimerState = 'waiting_start';
+    render();
+
+    const startNode = S.activeTrack.start;
+    const endNode = S.activeTrack.end;
+
+    S.trackWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+
+        // Krok 1: Oczekiwanie na wjazd na punkt startowy (promień 40 metrów)
+        if(S.trackTimerState === 'waiting_start'){
+          const dToStart = haversine(lat, lon, startNode.lat, startNode.lon);
+          if(dToStart <= 40){
+            // Wjechano na start! Odpalamy timer
+            S.trackTimerState = 'running';
+            S.trackStartTime = Date.now();
+            beep(880, 0.2);
+            vib(100);
+            render();
+            startLiveTimerInterval();
+          }
+        }
+        // Krok 2: Sprawdzanie czy dojechano do mety (promień 50 metrów)
+        else if(S.trackTimerState === 'running'){
+          const dToEnd = haversine(lat, lon, endNode.lat, endNode.lon);
+          if(dToEnd <= 50){
+            // Meta! Zatrzymujemy pomiar
+            const totalTime = (Date.now() - S.trackStartTime) / 1000;
+            S.trackTimerState = 'finished';
+            stopAI();
+            beep(1200, 0.4);
+            vib([100, 50, 100]);
+
+            // Zapis do rankingu toru
+            const record = {
+              trackId: S.activeTrack.id,
+              trackName: S.activeTrack.name,
+              nick: S.nick,
+              time: totalTime,
+              length: S.activeTrack.length,
+              ts: Date.now()
+            };
+            S.trackLeaderboard.push(record);
+            S.trackLeaderboard.sort((a,b) => a.time - b.time);
+            LS.s('bl_track_lb', S.trackLeaderboard);
+
+            // Dodanie REP za ukończenie trasy
+            S.rep += 50;
+            LS.s('bl_rep', S.rep);
+            syncUserLeaderboard();
+
+            alert(`🏁 TRASA UKOŃCZONA!\nCzas: ${totalTime.toFixed(1)} s\nZyskano +50 REP!`);
+            render();
+          }
+        }
+      },
+      (err) => {},
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+    );
+  },
+
+  stopTrackTracking(){
+    stopAI();
+    S.trackTimerState = 'idle';
+    render();
   },
 
   openMaps(lat, lon){
@@ -851,6 +1066,18 @@ const A = {
     }
   }
 };
+
+function startLiveTimerInterval(){
+  const interval = setInterval(() => {
+    if(S.trackTimerState !== 'running'){
+      clearInterval(interval);
+      return;
+    }
+    const elapsed = (Date.now() - S.trackStartTime) / 1000;
+    const el = $('#live-timer');
+    if(el) el.textContent = elapsed.toFixed(1) + ' s';
+  }, 100);
+}
 
 function renderAIHud(){
   const st = document.querySelector('.fr.ai small'); if(st) st.textContent = S.aiStatus;
