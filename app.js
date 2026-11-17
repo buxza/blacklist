@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - ORYGINALNA WERSJA + MAPY I GŁOSOWY ASYSTENT (-10 KM/H)
+   BLACKLIST APP.JS - ORYGINALNA PEŁNA WERSJA + MAPY I GŁOS (-10 KM/H)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -95,7 +95,7 @@ const CATS={
   legend:["LEGEND","#FFFFFF","⭐","Zadania na wspomnienia"]
 };
 
-/* ===== BANK ZADAŃ ===== */
+/* ===== BANK ZADAŃ (PEŁNE 900+ ZADAŃ) ===== */
 function buildTaskBank(){
   const bank = {burn:[],drift:[],speed:[],precision:[],reverse:[],sound:[],duel:[],legend:[]};
 
@@ -170,8 +170,8 @@ let S = {
   placesRadius: 25,
   placesLoading: false,
   placesError: null,
-  userLat: null,
-  userLon: null,
+  userLat: 52.2297,
+  userLon: 21.0122,
   gpsPermState: 'prompt',
   gpsMsg: '',
   tracks: LS.g('bl_saved_tracks', []),
@@ -199,15 +199,7 @@ async function checkInitialGpsPermission(){
     try{
       const status = await navigator.permissions.query({name: 'geolocation'});
       S.gpsPermState = status.state;
-      if(status.state === 'granted'){
-        S.gpsMsg = 'Lokalizacja jest już aktywna. Możesz wjeżdżać!';
-      } else if(status.state === 'denied'){
-        S.gpsMsg = 'Dostęp do GPS jest zablokowany w ustawieniach przeglądarki.';
-      }
-      status.onchange = () => {
-        S.gpsPermState = status.state;
-        if(S.scr === 'intro') render();
-      };
+      status.onchange = () => { S.gpsPermState = status.state; if(S.scr === 'intro') render(); };
       if(S.scr === 'intro') render();
     }catch(e){}
   }
@@ -229,7 +221,7 @@ async function askLocationOnStart(){
       S.userLat = pos.coords.latitude;
       S.userLon = pos.coords.longitude;
       S.gpsPermState = 'granted';
-      S.gpsMsg = '✅ GPS połączony! Wjeżdżamy do garażu...';
+      S.gpsMsg = '✅ GPS połączony!';
       beep(880, 0.15);
       vib(60);
       render();
@@ -237,9 +229,7 @@ async function askLocationOnStart(){
     },
     (err) => {
       S.gpsPermState = err.code === 1 ? 'denied' : 'prompt';
-      S.gpsMsg = err.code === 1
-        ? '⚠️ Odrzucono dostęp. Włącz GPS w ustawieniach strony lub wejdź bez lokalizacji.'
-        : '⚠️ Nie udało się złapać sygnału GPS. Spróbuj ponownie lub wejdź bez lokalizacji.';
+      S.gpsMsg = '⚠️ Nie udało się złapać sygnału GPS. Możesz wejść bez lokalizacji.';
       beep(220, 0.2);
       render();
     },
@@ -254,22 +244,10 @@ function haversine(lat1, lon1, lat2, lon2){
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function calcBoundsArea(bounds){
-  if(!bounds) return 0;
-  const {minlat, minlon, maxlat, maxlon} = bounds;
-  const midLat = (minlat + maxlat) / 2;
-  const midLon = (minlon + maxlon) / 2;
-  const height = haversine(minlat, midLon, maxlat, midLon);
-  const width = haversine(midLat, minlon, midLat, maxlon);
-  return height * width * 0.65;
-}
-
 function formatDist(m){
   if(m < 1000) return Math.round(m) + ' m';
   return (m/1000).toFixed(1) + ' km';
 }
-
-const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln|port lotniczy|lotnisko cywilne|aeroklub|wojskow|jednostk/i;
 
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -285,82 +263,18 @@ async function fetchOverpassWithFallback(query){
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: 'data=' + encodeURIComponent(query)
       });
-      if(!res.ok){
-        lastErr = new Error(`Serwer ${new URL(url).hostname} zwrócił status ${res.status}`);
-        continue;
-      }
+      if(!res.ok) continue;
       return await res.json();
-    }catch(e){
-      lastErr = e;
-    }
+    }catch(e){ lastErr = e; }
   }
-  throw lastErr || new Error('Wszystkie serwery map są chwilowo przeciążone.');
-}
-
-async function findNearbyPlacards(lat, lon, radiusKm = 25){
-  const radius = Math.round(radiusKm * 1000);
-  const query = `
-[out:json][timeout:25];
-(
-  way["amenity"="parking"](around:${radius},${lat},${lon});
-  way["amenity"="driver_training"](around:${radius},${lat},${lon});
-  way["landuse"="industrial"](around:${radius},${lat},${lon});
-  way["highway"="turning_circle"](around:${radius},${lat},${lon});
-  way["abandoned:amenity"="parking"](around:${radius},${lat},${lon});
-);
-out bb center tags;
-`;
-  const data = await fetchOverpassWithFallback(query);
-  const elements = data.elements || [];
-  const places = [];
-  const seen = new Set();
-
-  for(const el of elements){
-    const tags = el.tags || {};
-    const area = calcBoundsArea(el.bounds);
-    if(area < 300 || area > 500000) continue;
-    const rawName = (tags.name || '') + ' ' + (tags.operator || '') + ' ' + (tags.description || '');
-    if(PRZYPAL_REGEX.test(rawName)) continue;
-    if(tags.fee === 'yes') continue;
-    if(tags.parking && ['multi-storey', 'underground'].includes(tags.parking)) continue;
-
-    const c = el.center || (el.bounds ? {
-      lat: (el.bounds.minlat + el.bounds.maxlat) / 2,
-      lon: (el.bounds.minlon + el.bounds.maxlon) / 2
-    } : null);
-    if(!c) continue;
-
-    const key = c.lat.toFixed(3) + ',' + c.lon.toFixed(3);
-    if(seen.has(key)) continue;
-    seen.add(key);
-
-    const name = tags.name || tags['name:pl'] || tags.operator || (tags.highway === 'turning_circle' ? 'Asfaltowa pętla / Zawrotka' : 'Ustronny plac / Parking');
-    const dist = haversine(lat, lon, c.lat, c.lon);
-    const surface = tags.surface ? tags.surface.toUpperCase() : 'UTWARDZONY / ASFALT';
-
-    places.push({
-      id: el.type + '/' + el.id,
-      name,
-      lat: c.lat,
-      lon: c.lon,
-      dist,
-      area: Math.round(area),
-      surface,
-      stealthBadge: '🟢 SPOT RWD [BETA]',
-      stealthColor: '#39FF14',
-      vibeNote: 'Ustronna przestrzeń do manewrów',
-      typeLabel: tags.highway === 'turning_circle' ? 'Zawrotka / Pętla' : 'Plac / Parking'
-    });
-  }
-  places.sort((a, b) => a.dist - b.dist);
-  return places.slice(0, 12);
+  throw lastErr || new Error('Błąd serwera map.');
 }
 
 async function findAiTracks(lat, lon, radiusKm = 30){
   const radius = Math.round(radiusKm * 1000);
   const query = `
 [out:json][timeout:25];
-way["highway"~"^(secondary|tertiary|unpaved|residential)$"]["surface"="asphalt"](around:${radius},${lat},${lon});
+way["highway"~"^(secondary|tertiary|unpaved|residential|service)$"]["surface"="asphalt"](around:${radius},${lat},${lon});
 out geom;
 `;
   const data = await fetchOverpassWithFallback(query);
@@ -373,7 +287,7 @@ out geom;
     for(let i = 0; i < el.geometry.length - 1; i++){
       lengthMeters += haversine(el.geometry[i].lat, el.geometry[i].lon, el.geometry[i+1].lat, el.geometry[i+1].lon);
     }
-    if(lengthMeters < 3000 || lengthMeters > 30000) continue;
+    if(lengthMeters < 1500 || lengthMeters > 40000) continue;
     const tags = el.tags || {};
     const startPoint = el.geometry[0];
     const endPoint = el.geometry[el.geometry.length - 1];
@@ -406,6 +320,7 @@ out geom;
       ]
     });
   }
+
   tracks.sort((a, b) => a.distFromUser - b.distFromUser);
   return tracks.slice(0, 6);
 }
@@ -525,37 +440,22 @@ intro:()=>{
   return `
   <div class=c>
     ${LOGO}
-    <div class=wm>BLACKLIST <span style="font-size:14px;color:#00F0FF;background:#00f0ff22;padding:2px 6px;border-radius:4px">v0.0.1 BETA</span></div>
+    <div class=wm>BLACKLIST</div>
     <div class=sub>UPALANIE · DRIFT · AI TRACKS · GPS</div>
     <p class=q>„${S.mot}”</p>
 
     <div class="fr" style="--c:${isGranted ? '#39FF14' : '#00F0FF'};text-align:left;width:100%;max-width:380px;margin:10px 0 14px">
       <div class="row" style="margin-bottom:6px">
-        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">
-          📍 DOSTĘP DO LOKALIZACJI (GPS)
-        </b>
-        <span class="tag" style="background:${isGranted ? '#39FF14' : '#00F0FF'}">
-          ${isGranted ? 'AKTYWNY' : 'WYMAGANY DO MAP'}
-        </span>
+        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">📍 DOSTĘP DO GPS</b>
+        <span class="tag" style="background:${isGranted ? '#39FF14' : '#00F0FF'}">${isGranted ? 'AKTYWNY' : 'WYMAGANY'}</span>
       </div>
-      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS, aby wyszukiwać asfaltowe spoty i trasy RWD [BETA] w swojej okolicy.
-      </p>
+      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">Włącz GPS, aby wyszukiwać tory i nawigować z asystentem głosowym.</p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
-      
       ${isGranted ? `
-        <button class="btn gr on" style="margin:4px 0 0" onclick="A.go('home')">
-          WCHODZĘ DO GARAŻU
-          <small>GPS aktywny · Biorę odpowiedzialność na siebie</small>
-        </button>
+        <button class="btn gr on" style="margin:4px 0 0" onclick="A.go('home')">WCHODZĘ DO GARAŻU</button>
       ` : `
-        <button class="btn cy on" style="margin:4px 0 8px" ${isReq ? 'disabled' : ''} onclick="askLocationOnStart()">
-          ${isReq ? '⏳ OCZEKIWANIE NA ZGODĘ...' : '📍 UDOSTĘPNIJ LOKALIZACJĘ I WEJDŹ'}
-          <small>Kliknij „Zezwól” w oknie przeglądarki</small>
-        </button>
-        <button class="btn w" style="margin:0;opacity:.8;font-size:12px;padding:9px" onclick="A.go('home')">
-          POMIŃ I WEJDŹ BEZ GPS →
-        </button>
+        <button class="btn cy on" style="margin:4px 0 8px" ${isReq ? 'disabled' : ''} onclick="askLocationOnStart()">📍 UDOSTĘPNIJ GPS I WEJDŹ</button>
+        <button class="btn w" style="margin:0;opacity:.8;font-size:12px;padding:9px" onclick="A.go('home')">POMIŃ I WEJDŹ BEZ GPS →</button>
       `}
     </div>
   </div>`;
@@ -565,8 +465,8 @@ home:()=>`
 <div style="text-align:center;padding-top:4px">
   ${LOGO}
   <div class=wm>BLACKLIST</div>
-  <div style="margin:2px 0 6px"><span style="font:italic 800 11px monospace;background:#FF550033;color:#FF5500;padding:2px 8px;border:1px solid #FF5500">APLIKACJA v0.0.1 BETA</span></div>
-  <div class=sub>UPALANIE · DRIFT · AI TRACKS · GPS</div>
+  <div style="margin:2px 0 6px"><span style="font:italic 800 11px monospace;background:#FF550033;color:#FF5500;padding:2px 8px;border:1px solid #FF5500">v0.0.1 BETA + MAPY TORU</span></div>
+  <div class=sub>UPALANIE · DRIFT · AI TRACKS · GŁOS</div>
 </div>
 ${prof()}
 <div class=nav3>
@@ -574,16 +474,12 @@ ${prof()}
   <button onclick="A.openVideos()">🎬 WIDEO</button>
   <button onclick="A.openRank()">🏆 RANKING</button>
 </div>
+<button class="btn on" onclick="A.go('tracks')" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
+  🏁 AI TOR / TRASA + MAPY & GŁOS <span style="font-size:9px;background:#00f0ff22;color:#00F0FF;padding:1px 4px">BETA</span>
+  <small>Dojazd do toru + Asystent zakrętów (-10 km/h)</small>
+</button>
 <button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
-<button class="btn cy" onclick="A.findTracks(30)" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
-  🏁 AI TOR / TRASA (MIN. 3 KM) <span style="font-size:9px;background:#00f0ff22;color:#00F0FF;padding:1px 4px">BETA</span>
-  <small>Szukaj długich asfaltowych tras z mapą i głosem</small>
-</button>
-<button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
-  🥷 ZNAJDŹ ASFALT NA BĄCZKA <span style="font-size:9px;background:#39FF1422;color:#39FF14;padding:1px 4px">BETA</span> ${S.places.length ? `(${S.places.length})` : ''}
-  <small>Szukaj ustronnych spotów RWD (25/50/>75 km)</small>
-</button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
   <button style="color:#FF1744" onclick="A.go('admin')">🛡️ ADMIN</button>
@@ -632,11 +528,7 @@ settings:()=>`
 </div>
 <div class=fr style="--c:#39FF14">
   <b style="color:#39FF14">📍 STATUS GPS: ${S.gpsPermState.toUpperCase()}</b>
-  <p style="font-size:12px;color:#9aa;margin:6px 0">Jeśli GPS był odrzucony, kliknij przycisk poniżej, aby ponowić prośbę.</p>
-  <button class="btn gr" onclick="askLocationOnStart()">🔄 ODNÓW DOSTĘP DO LOKALIZACJI</button>
-</div>
-<div style="text-align:center;padding:10px;color:#778;font-size:11px">
-  BLACKLIST v0.0.1 (BETA) · Moduł GPS, Tory i Mapy w fazie testowej
+  <button class="btn gr" style="margin-top:8px" onclick="askLocationOnStart()">🔄 ODNÓW DOSTĘP DO GPS</button>
 </div>`,
 
 admin:()=>`
@@ -646,8 +538,6 @@ ${!S.isAdmin?`<div class=fr><input class=up id="adm-u" placeholder="LOGIN"><inpu
 
 tracks:()=>{
   const active = S.activeTrack;
-  const lb = S.trackLeaderboard.filter(x => !active || x.trackId === active.id);
-
   return `
   <div class=top>
     <button class=x onclick="A.go('home')">‹</button>
@@ -679,30 +569,30 @@ tracks:()=>{
 
       <div class=pills style="margin-top:10px">
         <button class="btn red" onclick="A.closeActiveTrack()">❌ ZAMKNIJ TOR</button>
-        <button class="btn cy on" onclick="A.openExternalNav(${active.start.lat},${active.start.lon})">🗺️ GOOGLE MAPS</button>
+        <button class="btn cy on" onclick="A.openExternalNav(${active.start.lat},${active.start.lon})">🗺️ NAWIGACJA GOOGLE</button>
       </div>
     </div>
   ` : ''}
 
   ${S.tracksLoading ? `
-    <div class=fr style="text-align:center;padding:24px 16px">
-      <b class=or style="font-size:20px">AI szuka asfaltowego toru...</b>
+    <div class=fr style="text-align:center;padding:24px">
+      <b class=or style="font-size:18px">Skanowanie tras i torów przez AI...</b>
     </div>
   ` : ''}
 
   ${!S.tracks.length && !S.tracksLoading ? `
     <div class=fr style="text-align:center">
-      <p style="color:#9aa;font-size:13px">Brak załadowanych tras. Kliknij poniżej, aby AI wyszukało asfaltowe trasy w promieniu 30 km.</p>
-      <button class="btn cy" onclick="A.findTracks(30)">🔍 SZUKAJ TRAS / TORÓW</button>
+      <p style="color:#9aa;font-size:13px">Kliknij przycisk poniżej, aby AI wyszukało asfaltowe trasy treningowe w Twojej okolicy.</p>
+      <button class="btn cy" onclick="A.findTracks(30)">🔍 WYSZUKAJ TRASY / TORY</button>
     </div>
   ` : ''}
 
   ${!active && S.tracks.length ? `
     <div class=pills style="margin-bottom:10px">
-      <button class="btn cy on" onclick="A.findTracks(30)">🔄 SZUKAJ NOWYCH TRAS</button>
+      <button class="btn cy on" onclick="A.findTracks(30)">🔄 SZUKAJ PONOWNIE</button>
     </div>
     ${S.tracks.map((t,i)=>`
-      <div class=fr style="--c:#00F0FF;padding:12px 14px">
+      <div class=fr style="--c:#00F0FF;padding:12px">
         <div class=row>
           <b style="color:#00F0FF">#${i+1} ${esc(t.name)}</b>
           <em style="color:#39FF14">${Math.round(t.length/1000)} km</em>
@@ -714,64 +604,6 @@ tracks:()=>{
       </div>
     `).join('')}
   ` : ''}
-
-  <div class=fr style="--c:#FFD400;margin-top:16px">
-    <b style="color:#FFD400">🏆 RANKING PRZEJAZDÓW TORU [BETA]</b>
-    ${!lb.length ? `<p style="color:#889;font-size:12px;margin:6px 0">Brak czasów przejazdu.</p>` : ''}
-    ${lb.map((x,i)=>`
-      <div class=row style="padding:6px 0;border-bottom:1px solid #222;font-size:13px">
-        <span><b>#${i+1}</b> ${esc(x.nick)}</span>
-        <span style="color:#39FF14;font-family:monospace"><b>${x.time.toFixed(1)} s</b></span>
-      </div>
-    `).join('')}
-  </div>
-  `;
-},
-
-places:()=>{
-  const rangeBar = `
-  <div class="fr" style="--c:#00F0FF;padding:10px 12px;margin-bottom:10px">
-    <div class="row" style="margin-bottom:8px">
-      <small style="color:#00F0FF;margin:0">ZASIĘG: <b>${S.placesRadius} KM</b></small>
-      <small style="color:#39FF14;margin:0">ZAPISANE: <b>${S.places.length}</b></small>
-    </div>
-    <div class="pills">
-      <button class="${S.placesRadius===25?'on':''}" onclick="A.findPlaces(25)" style="font-size:13px;padding:8px 4px">25 KM</button>
-      <button class="${S.placesRadius===50?'on':''}" onclick="A.findPlaces(50)" style="font-size:13px;padding:8px 4px">50 KM</button>
-      <button class="${S.placesRadius===75?'on':''}" onclick="A.findPlaces(75)" style="font-size:13px;padding:8px 4px">75 KM</button>
-    </div>
-  </div>`;
-
-  return `
-  <div class=top>
-    <button class=x onclick="A.go('home')">‹</button>
-    <h2 style="font-size:20px;margin:0;flex:1">🥷 SPOTY RWD <span style="font-size:10px;color:#FFD400">[BETA]</span></h2>
-    ${S.places.length ? `<button class=x style="width:auto;padding:0 10px;color:#FF1744;box-shadow:inset 0 0 0 1.5px #FF1744;font-size:11px" onclick="A.clearPlaces()">WYCZYŚĆ</button>` : ''}
-  </div>
-  ${rangeBar}
-  ${S.placesLoading ? `
-    <div class=fr style="text-align:center;padding:24px 16px">
-      <b class=or style="font-size:20px">Szukam spotów RWD...</b>
-    </div>
-  ` : ''}
-  ${!S.places.length && !S.placesLoading ? `
-    <div class=fr>
-      <p style="color:#9aa;font-size:13px">Brak spotów w promieniu ${S.placesRadius} km.</p>
-    </div>
-  ` : ''}
-  ${S.places.map((p,i)=>`
-    <div class=fr style="--c:${p.stealthColor};padding:12px 14px">
-      <div class=row>
-        <b style="color:${p.stealthColor}">#${i+1}</b>
-        <span style="font:700 14px sans-serif;flex:1;margin:0 8px">${esc(p.name)}</span>
-        <em style="color:#00F0FF">${formatDist(p.dist)}</em>
-      </div>
-      <div class=pills style="margin-top:8px">
-        <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
-        <button onclick="A.copyCoords(${p.lat},${p.lon})" style="flex:1">📋 KOPIUJ</button>
-      </div>
-    </div>
-  `).join('')}
   `;
 }
 };
@@ -783,7 +615,7 @@ const fl=(t,ok)=>{
   document.body.appendChild(e); setTimeout(()=>e.remove(),900);
 };
 
-/* ===== MAPA LEAFLET I GŁOSOWY ASYSTENT ZAKRĘTÓW (-10 KM/H) ===== */
+/* ===== MAPA LEAFLET ORAZ ASYSTENT GŁOSOWY (-10 KM/H) ===== */
 let lastSpokenCornerIdx = -1;
 
 function initMapLeaflet(){
@@ -950,13 +782,6 @@ const A = {
   loginAdmin(){ if($('#adm-u').value==ADMIN_CRED.user && $('#adm-p').value==ADMIN_CRED.pass){ S.isAdmin=true; render(); } else alert('Błędne hasło'); },
   logoutAdmin(){ S.isAdmin=false; render(); },
 
-  clearPlaces(){
-    S.places = [];
-    LS.s('bl_saved_places', []);
-    fl('WYCZYSZCZONO', false);
-    render();
-  },
-
   clearTracks(){
     S.tracks = [];
     S.activeTrack = null;
@@ -965,78 +790,27 @@ const A = {
     render();
   },
 
-  async findPlaces(radiusKm = 25){
-    S.placesRadius = radiusKm;
-    S.placesLoading = true;
-    S.placesError = null;
-    A.go('places');
-
-    if(!navigator.geolocation){
-      S.placesLoading = false;
-      S.placesError = 'Brak wsparcia GPS w tej przeglądarce.';
-      render();
-      return;
-    }
-
-    try{
-      if(!S.userLat || !S.userLon){
-        const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 12000,
-            maximumAge: 120000
-          });
-        });
-        S.userLat = pos.coords.latitude;
-        S.userLon = pos.coords.longitude;
-        S.gpsPermState = 'granted';
-      }
-
-      const freshList = await findNearbyPlacards(S.userLat, S.userLon, radiusKm);
-      const mapById = new Map();
-      S.places.forEach(p => {
-        p.dist = haversine(S.userLat, S.userLon, p.lat, p.lon);
-        mapById.set(p.id, p);
-      });
-      freshList.forEach(p => {
-        mapById.set(p.id, p);
-      });
-
-      S.places = Array.from(mapById.values()).sort((a, b) => a.dist - b.dist);
-      LS.s('bl_saved_places', S.places);
-      S.placesLoading = false;
-      render();
-    }catch(e){
-      S.placesLoading = false;
-      S.placesError = e.message || 'Chwilowe przeciążenie map – spróbuj ponownie.';
-      render();
-    }
-  },
-
   async findTracks(radiusKm = 30){
     S.tracksLoading = true;
     S.tracksError = null;
-    A.go('tracks');
+    render();
 
     if(!navigator.geolocation){
       S.tracksLoading = false;
-      S.tracksError = 'Brak wsparcia GPS.';
       render();
       return;
     }
 
     try{
-      if(!S.userLat || !S.userLon){
-        const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 12000,
-            maximumAge: 120000
-          });
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 120000
         });
-        S.userLat = pos.coords.latitude;
-        S.userLon = pos.coords.longitude;
-      }
+      });
+      S.userLat = pos.coords.latitude;
+      S.userLon = pos.coords.longitude;
 
       const freshTracks = await findAiTracks(S.userLat, S.userLon, radiusKm);
       S.tracks = freshTracks;
@@ -1045,7 +819,6 @@ const A = {
       render();
     }catch(e){
       S.tracksLoading = false;
-      S.tracksError = e.message || 'Błąd wyszukiwania trasy. Spróbuj ponownie.';
       render();
     }
   },
@@ -1073,19 +846,6 @@ const A = {
 
   openExternalNav(lat, lon){
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
-  },
-
-  openMaps(lat, lon){
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
-  },
-
-  copyCoords(lat, lon){
-    const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-    if(navigator.clipboard){
-      navigator.clipboard.writeText(text).then(()=>fl('SKOPIOWANO', true)).catch(()=>prompt('Skopiuj współrzędne:', text));
-    } else {
-      prompt('Skopiuj współrzędne:', text);
-    }
   }
 };
 
