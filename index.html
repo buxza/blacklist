@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon.png">
 <title>BLACKLIST</title>
-<!-- Leaflet CSS (Darmowe mapy OpenStreetMap) -->
+<!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
 :root{color-scheme:dark;--o:#FF5500;--c:#00F0FF;--r:#FF1744;--g:#39FF14;--p:#0f0f12}
@@ -20,6 +20,7 @@ html,body{margin:0;background:#050505;color:#fff;font-family:-apple-system,"Sego
 body{background:repeating-linear-gradient(115deg,#050505 0 20px,#0a0a0a 20px 21px),linear-gradient(#050505,#050505);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background-blend-mode:normal}
 body:before{content:"";position:fixed;inset:0;background:linear-gradient(transparent 50%,#ff55002e),linear-gradient(#00f0ff1a,transparent 40%);pointer-events:none;z-index:-1}
 #app{max-width:480px;margin:0 auto;padding:14px 18px 34px;min-height:100vh;min-height:100dvh}
+.cut{clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
 .fr{background:var(--p);clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);box-shadow:inset 0 0 0 2px var(--c,#FF5500),inset 0 0 18px #ff55001f;padding:16px;margin:12px 0}
 .fr.red{--c:var(--r);animation:pu 1.4s infinite alternate}
 .fr.ai{--c:var(--g);box-shadow:inset 0 0 0 2px var(--g),inset 0 0 18px #39ff1422}
@@ -44,21 +45,34 @@ small{color:#9aa;font-size:10px;font-weight:700;display:block;margin:4px 0}
 .tb i.on{background:var(--c,#FF5500);box-shadow:0 0 6px var(--c,#FF5500)}
 .tb i.hot.on{background:#FF1744;box-shadow:0 0 6px #FF1744}
 h2{font:italic 900 30px sans-serif;color:var(--o);margin:10px 0;text-shadow:0 0 10px #ff550099}
+h3{font:italic 800 13px sans-serif;letter-spacing:2px;color:var(--c);margin:16px 0 6px}
+.chip{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin:7px 0;padding:11px 12px;background:#0f0f12;color:#777;border:0;font:700 14px sans-serif;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);box-shadow:inset 0 0 0 2px #333;cursor:pointer}
+.chip.on{color:var(--c);box-shadow:inset 0 0 0 2px var(--c)}
+.chip span{font-size:20px}.chip small{color:inherit;opacity:.75;font-weight:500;font-size:11px}
 .pills{display:flex;gap:8px}.pills button{flex:1;padding:10px;border:0;background:none;color:#00F0FF;font:italic 900 16px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);cursor:pointer}
 .pills button.on{background:#00F0FF;color:#000}
 input,select,textarea{width:100%;margin:5px 0;padding:12px;background:#0f0f12;border:0;color:#fff;font:700 15px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;outline:0}
 input.up{font:italic 800 17px sans-serif;text-transform:uppercase}
 .top{display:flex;gap:10px;align-items:center}
 .x{width:40px;height:40px;border:0;background:#000;color:#00F0FF;font-size:16px;font-weight:900;box-shadow:inset 0 0 0 2px #00F0FF;cursor:pointer}
+.big2{font:italic 900 22px sans-serif}
+.sc{flex:1;text-align:center;padding:5px;box-shadow:inset 0 0 0 1.5px #00F0FF66;color:#00F0FF}.sc.a{background:#00F0FF;color:#000}.sc.a small{color:#000}
+.scs{display:flex;gap:8px;margin-top:10px}
 .card{animation:in .35s;min-height:42vh;display:flex;flex-direction:column;gap:10px}
-@keyframes in{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes in{from{transform:translateX(30px);opacity:0}}
 .tag{color:#000;font:italic 800 11px sans-serif;padding:4px 8px;display:inline-flex;align-items:center;gap:4px}
 .ai-badge{background:#39FF14;color:#000;font:italic 900 11px monospace;padding:4px 8px;box-shadow:0 0 10px #39ff1488}
 .tx{font:700 20px/1.35 sans-serif;margin:4px 0;flex:1}
 .big{display:block;text-align:center;font:italic 900 44px monospace;margin:4px 0}
 .acts{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:sticky;bottom:10px;background:#050505dd;padding-top:4px}
+.sh{animation:sh .4s}@keyframes sh{20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
 .fl{position:fixed;left:0;right:0;top:38%;text-align:center;font:italic 900 54px sans-serif;text-shadow:0 0 16px currentColor;pointer-events:none;animation:fl .9s forwards;z-index:25}
 @keyframes fl{0%{transform:scale(.5);opacity:0}25%{transform:scale(1.15);opacity:1}100%{transform:translateY(-50px);opacity:0}}
+.lu{position:fixed;inset:0;background:#000e;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center}
+.lu b{font:italic 900 52px sans-serif;color:var(--o);text-shadow:0 0 18px var(--o)}
+.lu span{font:italic 900 32px sans-serif;color:var(--c)}
+.rl{display:flex;gap:10px;align-items:center;font:italic 800 16px sans-serif}.rl em{margin-left:auto;font:900 14px monospace}
+.mut{text-align:center;color:#778;font-size:11px;margin:10px 0}
 .nav3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}
 .nav3 button{padding:11px 4px;font:italic 900 13px sans-serif;border:0;background:#0f0f12;color:#fff;box-shadow:inset 0 0 0 1.5px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);cursor:pointer}
 .nav3 button.on{background:#00F0FF;color:#000}
@@ -68,8 +82,8 @@ input.up{font:italic 800 17px sans-serif;text-transform:uppercase}
 .foot-links{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:10px;border-top:1px solid #222}
 .foot-links button{background:none;border:0;font:700 11px sans-serif;cursor:pointer;padding:6px}
 .badge-adm{background:#FF1744;color:#fff;font:900 10px monospace;padding:2px 6px;margin-left:6px}
-/* Styl mapy Leaflet */
-#map-container { width: 100%; height: 350px; margin: 10px 0; border: 2px solid #00F0FF; position: relative; }
+/* Map styles */
+#map-container { width: 100%; height: 360px; margin: 10px 0; border: 2px solid #00F0FF; position: relative; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #fff; border: 1px solid #00F0FF; }
 </style>
 </head>
