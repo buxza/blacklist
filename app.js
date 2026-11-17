@@ -1969,7 +1969,7 @@ out geom;
     const have = new Set(bank.map(x=>x.t));
     H[cat].forEach((t,i)=>{ if(!have.has(t)) bank.push({t, d:[1,2,3][i%3], s:20+(i%3)*10, ai:null}); });
   });
-  LS.s('bl_seen', []);   // reset historii, zeby nowe zadania weszly od razu
+  // (usuniete: reset historii przy KAZDYM wejsciu powodowal powtarzanie zadan; reset jednorazowy jest w DODATKU 10)
 })();
 
 /* ---------- (8) OFFLINE ---------- */
@@ -2085,5 +2085,203 @@ CATW.sync();
 </div>`;
     return h.replace(/<button class="btn on" onclick="A\.start\(\)">/, box + '<button class="btn on" onclick="A.start()">');
   };
+})();
+render();
+
+/* ============================================================================
+   DODATEK 10: (1) koniec powtorek zadan  (2) DRAG TEST (GPS)  (3) MOJE TORY: nagrywanie + mapa ciepla
+   ============================================================================ */
+(function(){
+  const g=id=>document.getElementById(id), set=(id,v)=>{const e=g(id);if(e)e.textContent=v};
+  const hv=(a,b,c,d)=>haversine(a,b,c,d), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  let wl=null; const keep=async()=>{try{wl=await navigator.wakeLock.request('screen')}catch(e){}}, free=()=>{try{wl&&wl.release()}catch(e){}wl=null};
+  const fix=(p,L)=>{const t=p.timestamp||Date.now(),lat=p.coords.latitude,lon=p.coords.longitude;let v=p.coords.speed;
+    if((v==null||isNaN(v))&&L)v=hv(L.lat,L.lon,lat,lon)/Math.max(.3,(t-L.t)/1000);return{lat,lon,t,v:(v||0)*3.6,acc:p.coords.accuracy}};
+  const btn=(txt,on,cb,st='')=>`<button onclick="${cb}" style="flex:1;min-width:0;padding:10px 4px;border:0;font:italic 900 13px sans-serif;background:${on?'#00F0FF':'none'};color:${on?'#000':'#00F0FF'};box-shadow:inset 0 0 0 2px #00F0FF;${st}">${txt}</button>`;
+  const DISC='<p class=mut>Robisz to na własną odpowiedzialność – tylko na zamkniętym odcinku lub torze, za zgodą właściciela terenu.</p>';
+
+  /* ---------- (1) KONIEC POWTOREK ---------- */
+  const sk=t=>String(t).toLowerCase().replace(/[0-9]+([.,][0-9]+)?/g,'#').replace(/\s+/g,' ').trim();
+  const spread=(a,n)=>a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);
+  window.DEDUPE={removed:0,run(){
+    const seen=new Set(),groups={};let before=0;
+    Object.keys(TASK_BANK).forEach(c=>TASK_BANK[c].forEach(x=>{before++;const k=sk(x.t);(groups[k]=groups[k]||[]).push({x,c})}));
+    const keepSet=new Set();
+    Object.values(groups).forEach(a=>{
+      const ai=a.filter(o=>o.x.ai).sort((p,q)=>(p.x.goal||0)-(q.x.goal||0)), pl2=a.filter(o=>!o.x.ai).sort((p,q)=>p.x.d-q.x.d);
+      spread(ai,4).concat(spread(pl2,2)).forEach(o=>keepSet.add(o.x));
+    });
+    Object.keys(TASK_BANK).forEach(c=>{const b=TASK_BANK[c],nb=b.filter(x=>{const k=x.t.toLowerCase();if(!keepSet.has(x)||seen.has(k))return false;seen.add(k);return true});b.splice(0,b.length,...nb)});
+    const after=Object.values(TASK_BANK).reduce((s,b)=>s+b.length,0);DEDUPE.removed=before-after;
+    if(!LS.g('bl_seen_v3',false)){LS.s('bl_seen',[]);LS.s('bl_seen_v3',true)}   // indeksy sie zmienily - jednorazowy reset
+    return after;
+  }};
+  DEDUPE.run();
+  (function(){ // dodatkowo: ta sama "konstrukcja" zadania nie wraca przez 25 kolejnych kart
+    const o=pick;pick=function(cats,maxD,aiOnly){let c,r=LS.g('bl_recent',[]);
+      for(let i=0;i<10;i++){c=o(cats,maxD,aiOnly);if(!r.includes(sk(c.t)))break}
+      r.push(sk(c.t));LS.s('bl_recent',r.slice(-25));return c};
+  })();
+
+  /* ---------- (2) DRAG TEST ---------- */
+  const DM={'0-100':{n:'0–100 km/h',k:'s',a:0,b:100},'1/8':{n:'1/8 MILI',k:'d',m:201.168},'1/4':{n:'1/4 MILI',k:'d',m:402.336},'100-150':{n:'100–150 km/h',k:'s',a:100,b:150},'100-200':{n:'100–200 km/h',k:'s',a:100,b:200},'x':{n:'WŁASNY ZAKRES',k:'s'}};
+  const DR=window.DR={mode:'0-100',ca:60,cb:130,st:'idle',last:null,run:null,watch:null,tick:null,res:null,hist:LS.g('bl_drag',[]),
+    rng(){const m=DM[DR.mode];return m.k=='d'?[0,null]:DR.mode=='x'?[DR.ca,DR.cb]:[m.a,m.b]},
+    nm(){const m=DM[DR.mode],[a,b]=DR.rng();return m.k=='d'?m.n:a+'–'+b+' km/h'},
+    pick(k){if(DR.st=='wait'||DR.st=='run')return;DR.mode=k;DR.res=null;DR.st='idle';render()},
+    cust(w,v){DR[w]=Math.max(0,+v||0)},
+    start(){
+      if(!navigator.geolocation){alert('Brak GPS w tej przeglądarce');return}
+      const [a,b]=DR.rng();if(b!=null&&b<=a){alert('W zakresie wartość „DO” musi być większa niż „OD”.');return}
+      DR.stop(1);DR.st='wait';DR.res=null;DR.last=null;DR.run=null;
+      DR.watch=navigator.geolocation.watchPosition(DR.on,e=>set('dr-s','Błąd GPS: '+e.message),{enableHighAccuracy:true,maximumAge:0,timeout:15000});
+      keep();vib(30);render()},
+    stop(q){if(DR.watch!=null){try{navigator.geolocation.clearWatch(DR.watch)}catch(e){}}DR.watch=null;clearInterval(DR.tick);free();if(DR.st=='wait'||DR.st=='run')DR.st='idle';if(!q)render()},
+    on(p){
+      const q=fix(p,DR.last),L=DR.last;DR.last=q;const m=DM[DR.mode],[a,b]=DR.rng();
+      set('dr-v',Math.round(q.v));set('dr-g','GPS ±'+Math.round(q.acc||0)+' m');
+      if(DR.st=='wait'){
+        const stand=a==0;
+        set('dr-s',stand?(q.v<3?'GOTOWY – DAJ GAZU!':'Zatrzymaj auto na starcie'):(q.v>=a?'Zwolnij poniżej '+a+' km/h i przyspiesz':'Rozpędzaj – pomiar ruszy od '+a+' km/h'));
+        const tv=stand?0:a,go=L&&(stand?(L.v<3&&q.v>=3):(L.v<a&&q.v>=a));
+        if(!go)return;
+        const t0=L.t+(tv-L.v)/Math.max(.01,q.v-L.v)*(q.t-L.t);
+        DR.run={t0,p:{t:t0,v:tv},d:0,sp:{}};DR.st='run';DR.w0=Date.now()-(q.t-t0);vib(40);beep(880,.15);set('dr-s','POMIAR TRWA…');
+        DR.tick=setInterval(()=>set('dr-t',((Date.now()-DR.w0)/1000).toFixed(2)),50);
+      }
+      if(DR.st!='run')return;
+      const r=DR.run,pp=r.p,dt=(q.t-pp.t)/1000;if(dt<=0)return;
+      const seg=(pp.v+q.v)/2/3.6*dt;
+      if(a==0)[60,100,200].forEach(S=>{if(pp.v<S&&q.v>=S&&r.sp[S]==null)r.sp[S]=(pp.t+(S-pp.v)/(q.v-pp.v)*(q.t-pp.t)-r.t0)/1000});
+      let tEnd=null,trap=null,dEnd=r.d+seg;
+      if(m.k=='s'){if(pp.v<b&&q.v>=b){tEnd=pp.t+(b-pp.v)/(q.v-pp.v)*(q.t-pp.t);trap=b;dEnd=r.d+(pp.v+b)/2/3.6*((tEnd-pp.t)/1000)}}
+      else if(dEnd>=m.m){const rem=m.m-r.d,v0=pp.v/3.6,ac=(q.v-pp.v)/3.6/dt,tau=Math.abs(ac)<1e-6?rem/Math.max(.1,v0):(-v0+Math.sqrt(Math.max(0,v0*v0+2*ac*rem)))/ac;
+        tEnd=pp.t+tau*1000;trap=pp.v+(q.v-pp.v)*Math.min(1,tau/dt);dEnd=m.m}
+      if(tEnd!=null)return DR.done(tEnd-r.t0,trap,dEnd);
+      r.d=dEnd;r.p=q;set('dr-d',Math.round(dEnd)+' m');
+    },
+    done(ms,trap,d){
+      const r=DR.run,time=ms/1000,name=DR.nm(),prev=DR.hist.filter(x=>x.name==name).map(x=>x.time);
+      const res={name,time,trap,dist:d,sp:r.sp,ts:Date.now(),pb:!prev.length||time<Math.min(...prev)};
+      DR.hist.unshift(res);DR.hist=DR.hist.slice(0,60);LS.s('bl_drag',DR.hist);DR.res=res;DR.st='done';DR.stop(1);
+      beep(1200,.3);vib(res.pb?[80,40,80,40,200]:[120]);render()},
+    clear(){if(confirm('Usunąć historię drag testów?')){DR.hist=[];LS.s('bl_drag',[]);DR.res=null;render()}}
+  };
+  V.drag=()=>{
+    const [a,b]=DR.rng(),r=DR.res,busy=DR.st=='wait'||DR.st=='run',best={};
+    DR.hist.forEach(x=>{if(!best[x.name]||x.time<best[x.name])best[x.name]=x.time});
+    const hint=DR.st=='wait'?(a==0?'Ustaw auto w miejscu i czekaj na „GOTOWY”':'Rozpędzaj auto'):DR.st=='run'?'POMIAR TRWA…':'Wybierz pomiar i wciśnij START';
+    return `<button class=x style="width:auto;padding:0 14px" onclick="A.go('home')">‹ GARAŻ</button><h2>DRAG TEST</h2>
+<div class=fr style="--c:#FF5500"><h3 style="margin-top:0">WYBIERZ POMIAR</h3>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${Object.keys(DM).map(k=>btn(DM[k].n,DR.mode==k,`DR.pick('${k}')`,busy?'opacity:.4':'')).join('')}</div>
+${DR.mode=='x'?`<div style="display:flex;gap:8px;margin-top:10px;align-items:center"><input type=number inputmode=numeric value="${DR.ca}" oninput="DR.cust('ca',this.value)" placeholder="OD km/h" style="text-transform:none"><b>–</b><input type=number inputmode=numeric value="${DR.cb}" oninput="DR.cust('cb',this.value)" placeholder="DO km/h" style="text-transform:none"></div>`:''}</div>
+<div class=fr style="--c:#00F0FF;text-align:center"><div style="font:italic 900 64px monospace;line-height:1"><span id=dr-v>0</span><small style="display:inline;font-size:16px"> km/h</small></div>
+<div id=dr-t style="font:900 42px monospace;color:#FF5500;margin:6px 0">${r?r.time.toFixed(2):'0.00'}</div><small id=dr-d>${DR.mode=='1/8'||DR.mode=='1/4'?'0 m':''}</small><small id=dr-g>GPS –</small>
+<div id=dr-s style="font:italic 800 16px sans-serif;color:#39FF14;margin-top:6px">${hint}</div></div>
+${busy?`<button class="btn red" onclick="DR.stop()">PRZERWIJ</button>`:`<button class="btn on" onclick="DR.start()">START POMIARU<small>Ustaw auto, wciśnij START i ruszaj</small></button>`}
+${r?`<div class=fr style="--c:${r.pb?'#FFD400':'#39FF14'};text-align:center"><b style="color:#FFD400">${r.pb?'🏆 NOWY REKORD!':'WYNIK'}</b><div style="font:italic 900 56px monospace">${r.time.toFixed(2)} s</div><small>${esc(r.name)} · prędkość na mecie ${Math.round(r.trap)} km/h · dystans ${Math.round(r.dist)} m</small>${Object.keys(r.sp||{}).length?`<small>${Object.keys(r.sp).map(k=>'0–'+k+': '+r.sp[k].toFixed(2)+' s').join(' · ')}</small>`:''}</div>`:''}
+<div class=fr><h3 style="margin-top:0">REKORDY I HISTORIA</h3>${Object.keys(best).length?Object.keys(best).map(k=>`<div class=rl><span style="font-size:14px">${esc(k)}</span><em>${best[k].toFixed(2)} s</em></div>`).join(''):'<small>Brak pomiarów.</small>'}
+${DR.hist.slice(0,8).map(x=>`<small>${new Date(x.ts).toLocaleString('pl-PL')} · ${esc(x.name)} · <b>${x.time.toFixed(2)} s</b> · ${Math.round(x.trap)} km/h${x.pb?' 🏆':''}</small>`).join('')}
+${DR.hist.length?`<button class="btn red w" onclick="DR.clear()">USUŃ HISTORIĘ</button>`:''}</div>
+<p class=mut>GPS (ok. 1 pomiar na sekundę) daje wynik orientacyjny, zwykle ±0,1–0,3 s. Do porównań i zabawy, nie do oficjalnych czasów.</p>${DISC}`};
+
+  /* ---------- (3) MOJE TORY: nagrywanie + mapa ciepla ---------- */
+  const fmt=s=>{const m=Math.floor(s/60);return m+':'+(s-m*60).toFixed(1).padStart(4,'0')};
+  const cumd=P=>{let d=0;return P.map((p,i)=>{if(i)d+=hv(P[i-1][0],P[i-1][1],p[0],p[1]);return d})};
+  const sm=(a,n=2)=>a.map((_,i)=>{let s=0,c=0;for(let j=i-n;j<=i+n;j++)if(a[j]!=null){s+=a[j];c++}return s/c});
+  const MT=window.MT={d:LS.g('bl_mytracks',[]),tid:null,rec:false,watch:null,run:null,last:null,tick:null,vw:{t:null,r:null,m:'v',pos:100},fmt,
+    save(){LS.s('bl_mytracks',MT.d)}, T(id){return MT.d.find(x=>x.id==id)},
+    add(){const e=g('mt-n'),n=((e&&e.value)||'').trim()||'MÓJ TOR '+(MT.d.length+1),t={id:'t'+Date.now(),name:n,runs:[]};MT.d.unshift(t);MT.save();MT.again(t.id)},
+    again(id){MT.tid=id;A.go('mtrec')},
+    del(id){if(confirm('Usunąć tor wraz ze wszystkimi przejazdami?')){MT.d=MT.d.filter(x=>x.id!=id);MT.save();render()}},
+    delRun(id){const t=MT.T(MT.vw.t);if(t&&confirm('Usunąć ten przejazd?')){t.runs=t.runs.filter(x=>x.id!=id);MT.save();t.runs.length?MT.open(t.id,t.runs[t.runs.length-1].id):A.go('mt')}},
+    open(t,r){MT.vw={t,r,m:'v',pos:100};A.go('mtview')},
+    sel(r){MT.vw.r=r;MT.vw.pos=100;render()}, mode(m){MT.vw.m=m;render()}, scrub(v){MT.vw.pos=+v;MT.draw()},
+    startRec(){
+      if(!navigator.geolocation){alert('Brak GPS w tej przeglądarce');return}
+      MT.last=null;MT.run={t0:null,pts:[],d:0,vm:0};MT.rec=true;
+      MT.watch=navigator.geolocation.watchPosition(p=>{
+        const r=MT.run;if(!r)return;const q=fix(p,MT.last);if(r.t0==null)r.t0=q.t;
+        if(MT.last)r.d+=hv(MT.last.lat,MT.last.lon,q.lat,q.lon);
+        MT.last=q;r.vm=Math.max(r.vm,q.v);r.pts.push([+q.lat.toFixed(6),+q.lon.toFixed(6),Math.round(q.v),q.t-r.t0]);
+        set('mt-v',Math.round(q.v));set('mt-d',(r.d/1000).toFixed(2));set('mt-m',Math.round(r.vm));set('mt-p',r.pts.length);
+      },e=>set('mt-s','Błąd GPS: '+e.message),{enableHighAccuracy:true,maximumAge:0,timeout:15000});
+      MT.w0=Date.now();MT.tick=setInterval(()=>set('mt-t',fmt((Date.now()-MT.w0)/1000)),100);keep();vib(40);beep(880,.15);render()},
+    stopRec(){
+      if(MT.watch!=null){try{navigator.geolocation.clearWatch(MT.watch)}catch(e){}}MT.watch=null;clearInterval(MT.tick);free();
+      const r=MT.run,t=MT.T(MT.tid);MT.rec=false;MT.run=null;
+      if(!r||r.pts.length<5||!t){alert('Za mało punktów GPS – przejazd nie został zapisany.');A.go('mt');return}
+      const run={id:'r'+Date.now(),ts:Date.now(),time:r.pts[r.pts.length-1][3]/1000,dist:r.d,vmax:Math.round(r.vm),pts:r.pts};
+      t.runs.push(run);MT.save();vib([60,40,120]);MT.open(t.id,run.id)},
+    calc(){
+      const t=MT.T(MT.vw.t),r=t&&t.runs.find(x=>x.id==MT.vw.r);if(!r)return null;
+      const P=r.pts,v=sm(P.map(p=>p[2])),T=P.map(p=>p[3]/1000),cd=cumd(P),ac=v.map((x,i)=>i?(x-v[i-1])/Math.max(.2,T[i]-T[i-1]):0);
+      const ref=t.runs.filter(x=>x.id!=r.id).sort((a,b)=>a.time-b.time)[0]||null;let dl=null;
+      if(ref){const cr=cumd(ref.pts),tot=cd[cd.length-1]||1,rt=cr[cr.length-1]||1,RT=ref.pts;
+        dl=sm(P.map((p,i)=>{const dd=cd[i]/tot*rt,j=cr.findIndex(x=>x>=dd);let tr;
+          if(j<0)tr=RT[RT.length-1][3]/1000;else if(j==0)tr=RT[0][3]/1000;else{const f=(dd-cr[j-1])/Math.max(.001,cr[j]-cr[j-1]);tr=(RT[j-1][3]+f*(RT[j][3]-RT[j-1][3]))/1000}
+          return T[i]-tr}))}
+      return{t,r,P,v,T,cd,ac,dl,ref}},
+    draw(){
+      const cv=g('mt-cv');if(!cv)return;const c=MT.calc();if(!c)return;
+      const W=720,H=880,x=cv.getContext('2d'),m=MT.vw.m;cv.width=W;cv.height=H;
+      x.fillStyle='#050505';x.fillRect(0,0,W,H);
+      x.fillStyle='#FF5500';x.font='italic 900 40px Arial';x.fillText('BLACKLIST',30,56);
+      x.fillStyle='#00F0FF';x.font='bold 24px Arial';x.fillText(String(c.t.name).slice(0,30).toUpperCase(),30,92);
+      x.fillStyle='#fff';x.font='bold 20px Arial';x.fillText('CZAS '+fmt(c.r.time)+'  |  '+(c.r.dist/1000).toFixed(2)+' km  |  MAX '+c.r.vmax+' km/h',30,126);
+      const lat0=c.P[0][0],lon0=c.P[0][1],kx=Math.cos(lat0*Math.PI/180),X=p=>(p[1]-lon0)*111320*kx,Y=p=>-(p[0]-lat0)*111320;
+      let a=1e12,b=-1e12,e=1e12,f=-1e12;c.P.forEach(p=>{a=Math.min(a,X(p));b=Math.max(b,X(p));e=Math.min(e,Y(p));f=Math.max(f,Y(p))});
+      const bx=60,by=160,bw=W-120,bh=H-by-160,sc=Math.min(bw/Math.max(1,b-a),bh/Math.max(1,f-e)),ox=bx+(bw-(b-a)*sc)/2,oy=by+(bh-(f-e)*sc)/2,PX=p=>ox+(X(p)-a)*sc,PY=p=>oy+(Y(p)-e)*sc;
+      x.lineCap='round';x.lineJoin='round';x.strokeStyle='#1b1b1f';x.lineWidth=16;x.beginPath();c.P.forEach((p,i)=>i?x.lineTo(PX(p),PY(p)):x.moveTo(PX(p),PY(p)));x.stroke();
+      const vmax=Math.max(1,...c.v),sl=i=>m=='t'?(c.dl?(c.dl[i]-c.dl[i-1])/Math.max(.2,c.T[i]-c.T[i-1]):0):c.ac[i];let mx=.05;
+      if(m!='v')for(let i=1;i<c.P.length;i++)mx=Math.max(mx,Math.abs(sl(i)));
+      const hue=(i)=>{if(m=='v')return 210-210*(c.v[i]/vmax);if(m=='t'&&!c.dl)return 0;const k=clamp(sl(i)/mx,-1,1);return m=='t'?60-60*k:60+60*k};
+      for(let i=1;i<c.P.length;i++){x.strokeStyle=(m=='t'&&!c.dl)?'#555':'hsl('+Math.round(hue(i))+',95%,52%)';x.lineWidth=9;x.beginPath();x.moveTo(PX(c.P[i-1]),PY(c.P[i-1]));x.lineTo(PX(c.P[i]),PY(c.P[i]));x.stroke()}
+      const s0=c.P[0],s1=c.P[c.P.length-1];x.fillStyle='#fff';x.font='bold 18px Arial';
+      x.beginPath();x.arc(PX(s0),PY(s0),9,0,7);x.fill();x.fillText('START',PX(s0)+12,PY(s0)-10);x.beginPath();x.arc(PX(s1),PY(s1),9,0,7);x.fill();x.fillText('META',PX(s1)+12,PY(s1)+22);
+      const n=c.P.length,k=Math.round(MT.vw.pos/100*(n-1)),pk=c.P[k];
+      x.strokeStyle='#fff';x.lineWidth=4;x.fillStyle='#000';x.beginPath();x.arc(PX(pk),PY(pk),13,0,7);x.fill();x.stroke();
+      const info='t '+c.T[k].toFixed(1)+' s  |  '+Math.round(c.v[k])+' km/h'+(m=='t'&&c.dl?'  |  Δ '+(c.dl[k]>=0?'+':'')+c.dl[k].toFixed(2)+' s':'')+(m=='a'?'  |  '+(c.ac[k]>=0?'+':'')+c.ac[k].toFixed(1)+' km/h/s':'');
+      x.fillStyle='#fff';x.font='bold 22px Arial';x.fillText(info,30,H-112);
+      const ly=H-90,L=m=='v'?['wolno','szybko']:m=='t'?['zyskujesz czas','tracisz czas']:['hamowanie','przyspieszanie'];
+      for(let i=0;i<260;i++){const q=i/259,h=m=='v'?210-210*q:m=='t'?120-120*q:120*q;x.fillStyle='hsl('+Math.round(h)+',95%,52%)';x.fillRect(30+i,ly,1,16)}
+      if(m=='v'){}
+      x.font='bold 16px Arial';x.textAlign='left';x.fillStyle='#fff';x.fillText(L[0],30,ly+36);x.textAlign='right';x.fillText(L[1],290,ly+36);x.textAlign='left';
+      x.fillStyle='#9aa';x.font='15px Arial';
+      x.fillText(m=='t'?(c.dl?'Porównanie z najlepszym innym przejazdem tego toru ('+fmt(c.ref.time)+')':'Nagraj drugi przejazd tego toru, żeby porównać czas'):m=='v'?'Kolor = prędkość (max '+Math.round(vmax)+' km/h)':'Zmiana prędkości w km/h na sekundę',30,H-14);
+    },
+    shot(){const cv=g('mt-cv');if(!cv)return;cv.toBlob(b=>{if(!b)return;const f=new File([b],'mapa-toru.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:'Mapa toru BLACKLIST'}).catch(()=>{});return}
+      const u=URL.createObjectURL(b),l=document.createElement('a');l.href=u;l.download='mapa-toru.png';document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),2000)},'image/png')}
+  };
+  V.mt=()=>`<button class=x style="width:auto;padding:0 14px" onclick="A.go('home')">‹ GARAŻ</button><h2>MOJE TORY</h2>
+<p class=mut>Nagraj własny tor GPS, a potem oglądaj mapę ciepła: prędkość, zyskany/stracony czas i hamowanie.</p>
+<div class=fr style="--c:#FF5500"><input id=mt-n maxlength=24 placeholder="NAZWA TORU" style="text-transform:uppercase"><button class="btn on" onclick="MT.add()">＋ NAGRAJ NOWY TOR</button></div>
+${MT.d.map(t=>{const b=t.runs.length?Math.min(...t.runs.map(r=>r.time)):null,n=t.runs.length;return `<div class=fr style="--c:#00F0FF"><div class=rl><span>${esc(t.name)}</span><em>${n} ${pl(n,'przejazd','przejazdy','przejazdów')}</em></div><small>${b!=null?'Najlepszy czas: '+fmt(b):'Brak przejazdów'}</small><div style="display:flex;gap:8px">${n?btn('MAPA CIEPŁA',0,`MT.open('${t.id}','${t.runs[n-1].id}')`):''}${btn('JEDŹ',1,`MT.again('${t.id}')`)}${btn('USUŃ',0,`MT.del('${t.id}')`)}</div></div>`}).join('')}${DISC}`;
+  V.mtrec=()=>{const t=MT.T(MT.tid);if(!t)return `<button class=x onclick="A.go('mt')">‹ TORY</button>`;
+    return `<button class=x style="width:auto;padding:0 14px" onclick="A.go('mt')">‹ MOJE TORY</button><h2>${esc(t.name)}</h2>
+<div class=fr style="--c:#FF5500;text-align:center"><div id=mt-t style="font:900 56px monospace;color:#FF5500">0:00.0</div>
+<div style="font:italic 900 54px monospace"><span id=mt-v>0</span><small style="display:inline;font-size:16px"> km/h</small></div>
+<div style="display:flex;justify-content:space-around;font:700 13px monospace;color:#00F0FF"><span>DYSTANS <b id=mt-d>0.00</b> km</span><span>MAX <b id=mt-m>0</b></span><span>PKT <b id=mt-p>0</b></span></div>
+<small id=mt-s>${MT.rec?'Nagrywam przejazd…':'Ustaw się na starcie, wciśnij START i jedź.'}</small></div>
+${MT.rec?`<button class="btn red" onclick="MT.stopRec()">■ STOP I ZAPISZ</button>`:`<button class="btn on" onclick="MT.startRec()">● START NAGRYWANIA<small>GPS zapisuje trasę, prędkość i czas</small></button>`}${DISC}`};
+  V.mtview=()=>{const c=MT.calc();if(!c)return `<button class=x style="width:auto;padding:0 14px" onclick="A.go('mt')">‹ MOJE TORY</button><p class=mut>Brak przejazdu.</p>`;
+    const best=Math.min(...c.t.runs.map(r=>r.time)),m=MT.vw.m;
+    return `<button class=x style="width:auto;padding:0 14px" onclick="A.go('mt')">‹ MOJE TORY</button><h2>${esc(c.t.name)}</h2>
+<div style="display:flex;gap:6px;flex-wrap:wrap">${c.t.runs.map((r,i)=>btn('#'+(i+1)+' '+fmt(r.time)+(r.time==best?' ★':''),r.id==MT.vw.r,`MT.sel('${r.id}')`)).join('')}</div>
+<div style="display:flex;gap:6px;margin-top:8px">${btn('PRĘDKOŚĆ',m=='v',"MT.mode('v')")}${btn('CZAS Δ',m=='t',"MT.mode('t')")}${btn('PRZYSP./HAM.',m=='a',"MT.mode('a')")}</div>
+<canvas id=mt-cv style="width:100%;display:block;margin:8px 0;background:#000"></canvas>
+<small>Przesuń suwak, żeby zobaczyć czas i prędkość w danym miejscu toru.</small><input type=range min=0 max=100 value="${MT.vw.pos}" oninput="MT.scrub(this.value)" style="width:100%">
+<button class="btn on" onclick="MT.shot()">📸 ZAPISZ / UDOSTĘPNIJ OBRAZ</button><button class="btn" onclick="MT.again('${c.t.id}')" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">NAGRAJ KOLEJNY PRZEJAZD</button><button class="btn red w" onclick="MT.delRun('${c.r.id}')">USUŃ TEN PRZEJAZD</button>`};
+
+  /* ---------- przyciski na ekranie startowym, nawigacja, rysowanie ---------- */
+  const oHome=V.home;
+  V.home=()=>oHome().replace('<div class=foot-links>',`<button class="btn" onclick="A.go('mt')" style="color:#FF2EC4;box-shadow:inset 0 0 0 2px #FF2EC4">🛣️ MOJE TORY – NAGRAJ I MAPA CIEPŁA<small>Własny tor GPS: prędkość, czas i hamowanie</small></button><button class="btn" onclick="A.go('drag')" style="color:#FFD400;box-shadow:inset 0 0 0 2px #FFD400">🏁 DRAG TEST<small>0–100 · 1/8 mili · 1/4 mili · 100–150 · 100–200</small></button><div class=foot-links>`);
+  const oGo=A.go;
+  A.go=function(s){
+    if(MT.rec&&s!='mtrec'){if(!confirm('Nagrywanie trwa. Zakończyć i zapisać przejazd?'))return;MT.stopRec();return}
+    if(s!='drag')DR.stop(1);
+    oGo.call(A,s)};
+  const oR=render;render=function(){oR();try{MT.draw()}catch(e){}};
 })();
 render();
