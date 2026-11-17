@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - WERSJA BETA 0.0.1 (SPOTY RWD + AI TRACK ROUTE & TIMER)
+   BLACKLIST APP.JS - WERSJA BETA 0.0.1 (FIXED OVERPASS 400 ERROR)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -161,19 +161,17 @@ let S = {
   userLon: null,
   gpsPermState: 'prompt',
   gpsMsg: '',
-  // STAN MODUŁU AI TRACK (TRASA & TIMER)
   tracks: LS.g('bl_saved_tracks', []),
   tracksLoading: false,
   tracksError: null,
   activeTrack: null,
-  trackTimerState: 'idle', // idle, waiting_start, running, finished
+  trackTimerState: 'idle',
   trackStartTime: 0,
   trackElapsedTime: 0,
   trackLeaderboard: LS.g('bl_track_lb', []),
   trackWatchId: null
 };
 
-/* ===== SPRAWDZANIE UPRAWNIEŃ GPS NA START ===== */
 async function checkInitialGpsPermission(){
   if(!navigator.geolocation){
     S.gpsPermState = 'denied';
@@ -233,7 +231,6 @@ async function askLocationOnStart(){
   );
 }
 
-/* ===== OBLICZANIE GEOMETMrii ===== */
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371e3, toRad = d => d * Math.PI / 180;
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
@@ -258,13 +255,12 @@ function formatDist(m){
 
 const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln|port lotniczy|lotnisko cywilne|aeroklub|wojskow|jednostk/i;
 
+// Tylko stabilne endpointy Overpass (bez błędnych serwerów)
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+  'https://overpass.kumi.systems/api/interpreter'
 ];
 
-/* ===== BEZPIECZNY FETCH BEZ BŁĘDU ABORT ===== */
 async function fetchOverpassWithFallback(query){
   let lastErr = null;
   for(const url of OVERPASS_ENDPOINTS){
@@ -286,7 +282,6 @@ async function fetchOverpassWithFallback(query){
   throw lastErr || new Error('Wszystkie serwery map są chwilowo przeciążone.');
 }
 
-/* ===== WYSZUKIWARKA MIEJSCÓWEK (25/50/75 km) ===== */
 async function findNearbyPlacards(lat, lon, radiusKm = 25){
   const radius = Math.round(radiusKm * 1000);
   const query = `
@@ -358,25 +353,13 @@ way.candidates(around:450, .populated)->.near_homes;
   return places.slice(0, 10);
 }
 
-/* ===== NOWY MODUŁ AI: WYSZUKIWANIE TRASY / "TORU" (MIN 3 KM, MIN 5 KM OD MIASTA) ===== */
+/* ===== NAPRAWIONE ZAPYTANIE OVERPASS DLA TRAS (BEZ BŁĘDU 400) ===== */
 async function findAiTracks(lat, lon, radiusKm = 30){
   const radius = Math.round(radiusKm * 1000);
-  // Szukamy dróg asfaltowych w promieniu `radius`, z dala od miast (>5000m od węzłów place city/town)
   const query = `
-[out:json][timeout:30];
-(
-  way["highway"~"^(secondary|tertiary|unpaved|residential|service)$"]["surface"="asphalt"](around:${radius},${lat},${lon});
-  way["highway"~"^(secondary|tertiary)$"](around:${radius},${lat},${lon});
-)->.roads;
-
-(
-  node["place"~"^(city|town)$"](around:5000, .roads);
-)->.near_towns;
-
-way.roads(around:5000, .near_towns)->.near_city;
-(.roads; - .near_city;)->.isolated_roads;
-
-.isolated_roads out geom tags;
+[out:json][timeout:25];
+way["highway"~"^(secondary|tertiary|unpaved|residential)$"]["surface"="asphalt"](around:${radius},${lat},${lon});
+out geom;
 `;
   const data = await fetchOverpassWithFallback(query);
   const elements = data.elements || [];
@@ -385,7 +368,6 @@ way.roads(around:5000, .near_towns)->.near_city;
   for(const el of elements){
     if(!el.geometry || el.geometry.length < 3) continue;
     
-    // Obliczanie długości odcinka/trasy
     let lengthMeters = 0;
     for(let i = 0; i < el.geometry.length - 1; i++){
       const p1 = el.geometry[i];
@@ -393,8 +375,8 @@ way.roads(around:5000, .near_towns)->.near_city;
       lengthMeters += haversine(p1.lat, p1.lon, p2.lat, p2.lon);
     }
 
-    // Warunek: co najmniej 3 km (3000 metrów) długości toru
-    if(lengthMeters < 3000 || lengthMeters > 25000) continue;
+    // Warunek: co najmniej 3 km długości toru
+    if(lengthMeters < 3000 || lengthMeters > 30000) continue;
 
     const tags = el.tags || {};
     const startPoint = el.geometry[0];
@@ -404,7 +386,7 @@ way.roads(around:5000, .near_towns)->.near_city;
 
     tracks.push({
       id: 'track_' + el.id,
-      name: tags.name || tags.ref || `Odległy Tor RWD (${Math.round(lengthMeters/1000)} km)`,
+      name: tags.name || tags.ref || `Tor / Trasa RWD (${Math.round(lengthMeters/1000)} km)`,
       length: Math.round(lengthMeters),
       distFromUser,
       start: {lat: startPoint.lat, lon: startPoint.lon},
@@ -542,7 +524,7 @@ intro:()=>{
         </span>
       </div>
       <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS, aby wyszukiwać <b>asfaltowe trasy i tory (>3 km, >5 km od miast) [BETA]</b> oraz lokalizować ustronne spoty.
+        Włącz GPS, aby wyszukiwać <b>asfaltowe trasy i tory (>3 km) [BETA]</b> oraz lokalizować ustronne spoty.
       </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       
@@ -581,7 +563,7 @@ ${prof()}
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
 <button class="btn cy" onclick="A.findTracks(30)" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
   🏁 AI TOR / TRASA (MIN. 3 KM) <span style="font-size:9px;background:#00f0ff22;color:#00F0FF;padding:1px 4px">BETA</span>
-  <small>Szukaj długich asfaltowych tras >5 km od miast z timerem startu</small>
+  <small>Szukaj długich asfaltowych tras z timerem startu</small>
 </button>
 <button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
   🥷 ZNAJDŹ ASFALT NA BĄCZKA <span style="font-size:9px;background:#39FF1422;color:#39FF14;padding:1px 4px">BETA</span> ${S.places.length ? `(${S.places.length})` : ''}
@@ -647,7 +629,6 @@ admin:()=>`
 ${!S.isAdmin?`<div class=fr><input class=up id="adm-u" placeholder="LOGIN"><input type="password" id="adm-p" placeholder="HASŁO"><button class="btn red" onclick="A.loginAdmin()">ZALOGUJ</button></div>`:`<div class=fr><b style="color:#39FF14">ZALOGOWANY</b><button class="btn red" onclick="A.logoutAdmin()">WYLOGUJ</button></div>`}
 `,
 
-/* ===== EKRAN AI WYSZUKIWANIA TRAS / TORÓW ===== */
 tracks:()=>{
   const active = S.activeTrack;
   const lb = S.trackLeaderboard.filter(x => !active || x.trackId === active.id);
@@ -685,7 +666,7 @@ tracks:()=>{
   ${S.tracksLoading ? `
     <div class=fr style="text-align:center;padding:24px 16px">
       <b class=or style="font-size:20px">AI szuka asfaltowego toru...</b>
-      <p style="color:#9aa;margin-top:8px;font-size:12px">Filtrowanie tras o dł. min. 3 km i oddalonych min. 5 km od miast...</p>
+      <p style="color:#9aa;margin-top:8px;font-size:12px">Filtrowanie tras o dł. min. 3 km...</p>
     </div>
   ` : ''}
 
@@ -715,10 +696,10 @@ tracks:()=>{
           <em style="color:#39FF14">${Math.round(t.length/1000)} km</em>
         </div>
         <small style="color:#889;margin:4px 0 8px;display:block">
-          Odległość od Ciebie: <b style="color:#FFD400">${formatDist(t.distFromUser)}</b> · Teren niezabudowany
+          Odległość od Ciebie: <b style="color:#FFD400">${formatDist(t.distFromUser)}</b> · Asfalt
         </small>
         <div class=pills>
-          <button onclick="A.selectTrack('${t.id}')" style="flex:1">🎯 WYBIERJ TEN TOR</button>
+          <button onclick="A.selectTrack('${t.id}')" style="flex:1">🎯 WYBIERZ TEN TOR</button>
           <button onclick="A.openMaps(${t.start.lat},${t.start.lon})" style="flex:1">🗺️ START</button>
         </div>
       </div>
@@ -933,7 +914,6 @@ const A = {
     }
   },
 
-  /* ===== OBSŁUGA WYSZUKIWANIA I POMIARU TORU / TRASY ===== */
   async findTracks(radiusKm = 30){
     S.tracksLoading = true;
     S.tracksError = null;
@@ -994,11 +974,9 @@ const A = {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
 
-        // Krok 1: Oczekiwanie na wjazd na punkt startowy (promień 40 metrów)
         if(S.trackTimerState === 'waiting_start'){
           const dToStart = haversine(lat, lon, startNode.lat, startNode.lon);
           if(dToStart <= 40){
-            // Wjechano na start! Odpalamy timer
             S.trackTimerState = 'running';
             S.trackStartTime = Date.now();
             beep(880, 0.2);
@@ -1007,18 +985,15 @@ const A = {
             startLiveTimerInterval();
           }
         }
-        // Krok 2: Sprawdzanie czy dojechano do mety (promień 50 metrów)
         else if(S.trackTimerState === 'running'){
           const dToEnd = haversine(lat, lon, endNode.lat, endNode.lon);
           if(dToEnd <= 50){
-            // Meta! Zatrzymujemy pomiar
             const totalTime = (Date.now() - S.trackStartTime) / 1000;
             S.trackTimerState = 'finished';
             stopAI();
             beep(1200, 0.4);
             vib([100, 50, 100]);
 
-            // Zapis do rankingu toru
             const record = {
               trackId: S.activeTrack.id,
               trackName: S.activeTrack.name,
@@ -1031,7 +1006,6 @@ const A = {
             S.trackLeaderboard.sort((a,b) => a.time - b.time);
             LS.s('bl_track_lb', S.trackLeaderboard);
 
-            // Dodanie REP za ukończenie trasy
             S.rep += 50;
             LS.s('bl_rep', S.rep);
             syncUserLeaderboard();
