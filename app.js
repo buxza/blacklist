@@ -1361,3 +1361,99 @@ render();
   };
 })();
 render();
+
+
+/* ============================================================================
+   DODATEK 6: ROZNORODNE ZADANIA (po ~100 na kategorie, bez powtorzen)
+   Zastepuje tylko generyczne wypelniacze "Klasyczne wyzwanie #N"; zadania AI zostaja.
+   ============================================================================ */
+(function(){
+  let seed = 20260101;
+  const rnd = ()=>{ seed = (seed*1664525+1013904223)>>>0; return seed/4294967296; };
+  const shuffle = a=>{ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+  // szablon: tekst z {a} {b} {c}; listy parametrow; trudnosc bazowa
+  const combos=(tpl,lists)=>{
+    let out=[''];
+    const keys=Object.keys(lists);
+    let acc=[{}];
+    keys.forEach(k=>{ const n=[]; acc.forEach(o=>lists[k].forEach(v=>n.push({...o,[k]:v}))); acc=n; });
+    return acc.map(o=>tpl.replace(/\{(\w+)\}/g,(m,k)=>o[k]));
+  };
+  const G = {
+    burn:[
+      ['Zr\u00f3b burnout i zatrzymaj auto dok\u0142adnie {a}.',{a:['przy pacho\u0142ku','na namalowanej linii','na \u015brodku placu','mi\u0119dzy dwoma pacho\u0142kami','przy znaczniku z kredy','na kraw\u0119dzi p\u0142yty']},1],
+      ['Wykonaj {a} i po nim od razu {b}.',{a:['kr\u00f3tki burnout','burnout z miejsca','podw\u00f3jny burnout','burnout na p\u00f3\u0142 ko\u0142a','burnout z delikatnym skr\u0119tem'],b:['ruszaj prosto','zr\u00f3b k\u00f3\u0142ko wok\u00f3\u0142 pacho\u0142ka','zatrzymaj si\u0119 p\u0142ynnie','zmie\u0144 kierunek','wrzu\u0107 wy\u017cszy bieg i jed\u017a dalej']},2],
+      ['Zr\u00f3b {a} wok\u00f3\u0142 pacho\u0142ka, rozpoczynaj\u0105c od {b}.',{a:['2 pe\u0142ne k\u00f3\u0142ka','3 pe\u0142ne k\u00f3\u0142ka','p\u00f3\u0142kole','\u00f3semk\u0119 z dymem','k\u00f3\u0142ko w lewo i k\u00f3\u0142ko w prawo'],b:['startu z miejsca','jazdy powoli','doci\u015bni\u0119cia gazu na 1. biegu','hamulca r\u0119cznego','zimnych opon']},2],
+      ['Dym challenge: {a} i utrzymaj {b}.',{a:['zr\u00f3b burnout na luzie','zr\u00f3b burnout na 1. biegu','rozgrzej opony w k\u00f3\u0142ku','zacznij od delikatnego po\u015blizgu'],b:['sta\u0142e obroty','r\u00f3wny \u015blad na asfalcie','prost\u0105 lini\u0119 dymu','kontrol\u0119 nad kierownic\u0105','odsuni\u0119cie od pacho\u0142ka o 1 m']},3],
+      ['Wy\u015bcig na dym: {a} w czasie {b} sekund.',{a:['zr\u00f3b burnout','zr\u00f3b 2 donuty','zr\u00f3b p\u00f3\u0142kole z dymem','rozgrzej tylne opony','zostaw \u015blad min. 10 m'],b:['5','8','10','12','15','20']},2]
+    ],
+    drift:[
+      ['Przejed\u017a \u0142uk {a} w po\u015blizgu, utrzymuj\u0105c {b}.',{a:['w lewo','w prawo','o 90 stopni','o 180 stopni','szeroki','ciasny'],b:['sta\u0142y k\u0105t','p\u0142ynny gaz','jedno ruchome ko\u0142o kierownicy','kontrol\u0119 nad ty\u0142em','r\u00f3wne tempo','jeden \u015blad']},2],
+      ['Zr\u00f3b \u00f3semk\u0119 wok\u00f3\u0142 dw\u00f3ch pacho\u0142k\u00f3w {a} {b}.',{a:['w po\u015blizgu','z zachowaniem po\u015blizgu','bez przerwy w \u015blizgu','p\u0142ynnie'],b:['3 razy','2 razy','5 razy','bez cofania gazu','z jednym przeniesieniem masy']},3],
+      ['Zmie\u0144 kierunek po\u015blizgu {a} pomi\u0119dzy pacho\u0142kami ustawionymi {b}.',{a:['raz','dwa razy','trzy razy','pi\u0119\u0107 razy'],b:['co 8 m','co 10 m','co 12 m','co 15 m','w linii','w zygzak']},3],
+      ['Wejd\u017a w zakr\u0119t {a} i z\u0142ap po\u015blizg {b}.',{a:['z hamulca r\u0119cznego','z odci\u0105\u017cenia ty\u0142u','z przeniesienia masy','z szarpni\u0119cia kierownic\u0105','z gazu'],b:['od razu','na wej\u015bciu','w \u015brodku \u0142uku','na ko\u0144cu \u0142uku','po pierwszym pacho\u0142ku','z wyj\u015bciem prosto']},2],
+      ['Drift challenge: {a} i wyjed\u017a {b}.',{a:['wykonaj d\u0142ugi \u0142uk w lewo','wykonaj d\u0142ugi \u0142uk w prawo','zr\u00f3b p\u0119tl\u0119 wok\u00f3\u0142 pacho\u0142ka','zr\u00f3b \u0142uk po okr\u0119gu'],b:['dok\u0142adnie w osi','blisko pacho\u0142ka','na prostej','bez dotykania pacho\u0142k\u00f3w','bez cofania gazu','bez korekty kierownic\u0105']},3]
+    ],
+    speed:[
+      ['Rozp\u0119d\u017a auto {a} i zatrzymaj si\u0119 {b}.',{a:['na kr\u00f3tkiej prostej','na odcinku 100 m','na odcinku 150 m','do 3. biegu','mo\u017cliwie szybko','p\u0142ynnie'],b:['przy pacho\u0142ku','na linii','w oznaczonej strefie','dok\u0142adnie w miejscu','w polu 5 m','bez po\u015blizgu']},2],
+      ['Sprint: wystartuj {a} i dojed\u017a do pacho\u0142ka {b}.',{a:['z miejsca','z rolki','na 1. biegu','z lekkim po\u015blizgiem'],b:['najszybciej jak si\u0119 da','bez u\u015blizgu k\u00f3\u0142','w sta\u0142ym tempie','z p\u0142ynnym hamowaniem','bez kontaktu z nim','w czasie do 10 s']},2],
+      ['Zr\u00f3b {a} mi\u0119dzy pacho\u0142kami i wr\u00f3\u0107 {b}.',{a:['szybki slalom','slalom w lewo','slalom w prawo','kr\u00f3tki sprint z hamowaniem','zawrotk\u0119 z gazem'],b:['t\u0105 sam\u0105 drog\u0105','po \u0142uku','bez zwalniania','w jak najkr\u00f3tszym czasie','z lepszym czasem','z mniejszym b\u0142\u0119dem']},3],
+      ['Wy\u015bcig z czasem: {a} w czasie {b} sekund.',{a:['przejed\u017a 100 m i wyhamuj','zr\u00f3b slalom i wr\u00f3\u0107','zr\u00f3b okr\u0105\u017cenie wok\u00f3\u0142 placu','pokonaj prost\u0105 i zawr\u00f3\u0107','rozp\u0119d\u017a si\u0119 i zatrzymaj'],b:['8','10','12','15','18','25']},2],
+      ['Hamowanie: {a} z pr\u0119dko\u015bci {b} i zatrzymaj si\u0119 {c}.',{a:['wyhamuj'],b:['30 km/h','40 km/h','50 km/h','60 km/h'],c:['w strefie','przed lini\u0105','przy pacho\u0142ku','na wyznaczonym polu','p\u0142ynnie']},3]
+    ],
+    precision:[
+      ['Zaparkuj {a} w polu {b} jednym podej\u015bciem.',{a:['przodem','ty\u0142em','bokiem','z po\u015blizgiem','p\u0142ynnie'],b:['o szeroko\u015bci 3 m','o szeroko\u015bci 2,5 m','mi\u0119dzy pacho\u0142kami','na kredzie','wyznaczonym farb\u0105','ze znacznikiem']}, 2],
+      ['Przejed\u017a slalom {a} pacho\u0142k\u00f3w {b}.',{a:['5','6','7','8','10','12'],b:['powoli','bez dotykania','p\u0142ynnie','z r\u00f3wnym tempem','w obie strony','bez cofania']},2],
+      ['Zatrzymaj auto {a} od {b}.',{a:['5 cm','10 cm','20 cm','30 cm','50 cm','1 m'],b:['pacho\u0142ka','linii','kraw\u0119\u017cnika','znacznika','bramki','ta\u015bmy']},3],
+      ['Wjed\u017a w {a} z {b} bez dotykania kraw\u0119dzi.',{a:['w\u0105ski przejazd','bramk\u0119 z pacho\u0142k\u00f3w','tunel z pacho\u0142k\u00f3w','zw\u0119\u017cenie','korytarz'],b:['pr\u0119dko\u015bci\u0105 5 km/h','pr\u0119dko\u015bci\u0105 10 km/h','pr\u0119dko\u015bci\u0105 15 km/h','jednego podej\u015bcia','zerowym b\u0142\u0119dem','p\u0142ynn\u0105 kierownic\u0105']},3],
+      ['Trasa precyzyjna: {a} i zako\u0144cz {b}.',{a:['zr\u00f3b k\u00f3\u0142ko wok\u00f3\u0142 pacho\u0142ka','zr\u00f3b \u00f3semk\u0119 wok\u00f3\u0142 dw\u00f3ch pacho\u0142k\u00f3w','zr\u00f3b zawrotk\u0119','zr\u00f3b slalom w lewo i prawo','przejed\u017a w\u0105ski \u0142uk'],b:['w oznaczonym polu','przy znaczniku','dok\u0142adnie w osi','na prostej','jednym ruchem']},2]
+    ],
+    reverse:[
+      ['Cofaj {a} i zatrzymaj si\u0119 {b}.',{a:['na odcinku 20 m','na odcinku 30 m','na odcinku 50 m','po \u0142uku','w prostej linii','powoli'],b:['przy pacho\u0142ku','na linii','w polu','dok\u0142adnie w miejscu','p\u0142ynnie','bez korekty']},1],
+      ['Zr\u00f3b {a} ty\u0142em wok\u00f3\u0142 {b}.',{a:['p\u00f3\u0142kole','pe\u0142ne k\u00f3\u0142ko','\u00f3semk\u0119','slalom','\u0142uk'],b:['jednego pacho\u0142ka','dw\u00f3ch pacho\u0142k\u00f3w','trzech pacho\u0142k\u00f3w','wyznaczonego pola','znacznika','s\u0142upka']},2],
+      ['Zawr\u00f3\u0107 {a} i wr\u00f3\u0107 {b}.',{a:['ty\u0142em po \u0142uku','ty\u0142em z po\u015blizgiem','wahad\u0142em','manewrem \u201eJ\u201d','p\u00f3\u0142obrotem'],b:['na start','przodem','t\u0105 sam\u0105 drog\u0105','po prostej','w lini','do punktu']},3],
+      ['Wycofaj w {a} z {b} jednym podej\u015bciem.',{a:['bramk\u0119','korytarz','pole','tunel','zw\u0119\u017cenie'],b:['pr\u0119dko\u015bci\u0105 5 km/h','szybkim ruchem','bez dotykania','spokojnym tempem','p\u0142ynnym ko\u0142em','jednego ruchu']},2],
+      ['Rewers challenge: {a} ty\u0142em w czasie {b} sekund.',{a:['przejed\u017a slalom','zr\u00f3b \u00f3semk\u0119','zr\u00f3b \u0142uk','pokonaj 30 m','przejed\u017a korytarz'],b:['10','15','20','25','30','40']},3]
+    ],
+    sound:[
+      ['Zr\u00f3b {a} na {b} biegu.',{a:['odci\u0119cie zap\u0142onu','kilka odci\u0119\u0107','seri\u0119 odci\u0119\u0107','p\u0142ynne odci\u0119cie','kr\u00f3tkie odci\u0119cie','d\u0142ugie odci\u0119cie'],b:['1.','2.','3.','neutralnym','wolnych obrotach','wysokich obrotach']},1],
+      ['Zagraj wydechem: {a} i {b}.',{a:['podnie\u015b obroty do odci\u0119cia','zr\u00f3b seri\u0119 kr\u00f3tkich gaz\u00f3w','utrzymaj obroty przez 3 s','zr\u00f3b p\u0142ynne crescendo'],b:['opu\u015b\u0107 obroty p\u0142ynnie','zako\u0144cz cisz\u0105','zako\u0144cz g\u0142o\u015bnym akcentem','powt\u00f3rz 3 razy','zr\u00f3b rytm','zr\u00f3b echo']},2],
+      ['Rytm: {a} {b} razy.',{a:['zagraj odci\u0119ciami','zr\u00f3b kr\u00f3tkie gazy','zagraj wydechem','zr\u00f3b pulsuj\u0105ce obroty','zr\u00f3b seri\u0119 d\u017awi\u0119k\u00f3w'],b:['3','4','5','6','8','10']},2],
+      ['D\u017awi\u0119k w ruchu: {a} podczas {b}.',{a:['odci\u0119cie','kr\u00f3tki gaz','seria gaz\u00f3w','pop z wydechu'],b:['przejazdu przez pacho\u0142ki','\u0142uku','sprintu','powolnej jazdy','hamowania','wjazdu w zakr\u0119t']},3],
+      ['Sound check: {a} przez {b} sekund.',{a:['utrzymaj obroty','zagraj melodi\u0119 gazem','zr\u00f3b odci\u0119cia','zagraj rytm','pozostaw wolny bieg'],b:['3','4','5','6','8','10']},1]
+    ],
+    duel:[
+      ['Pojedynek: {a} i wygraj {b}.',{a:['sprint na 100 m','slalom na czas','\u0142uk w po\u015blizgu','burnout','hamowanie na linii'],b:['z kumplem','z rywalem','w 2 pr\u00f3bach','w 3 pr\u00f3bach','na czas','na punkty']},2],
+      ['Dwuosobowy duel: {a} i por\u00f3wnajcie {b}.',{a:['przejazd slalomu','czas sprintu','d\u0142ugo\u015b\u0107 dymu','k\u0105t po\u015blizgu','dok\u0142adno\u015b\u0107 parkowania'],b:['czasy','b\u0142\u0119dy','wyniki','k\u0105ty','styl','precyzj\u0119']},2],
+      ['Runda {a}: ty kontra {b}.',{a:['1','2','3','4','5','6'],b:['rywal w slalomie','rywal w sprincie','rywal w driftach','rywal w precyzji','rywal w burnoucie','rywal w cofaniu']},3],
+      ['Bitwa na dym: {a}, a drugi {b}.',{a:['robi burnout','robi donuty','robi \u00f3semk\u0119','robi \u0142uk'],b:['powtarza i poprawia','odpowiada lepszym','pr\u00f3buje d\u0142u\u017cej','robi to szybciej','robi to cia\u015bniej','dok\u0142ada jedno k\u00f3\u0142ko']},3],
+      ['Pojedynek na punkty: {a} (max {b} pkt).',{a:['styl','precyzja','czas','dym','k\u0105t'],b:['5','10','15','20','25','30']},2]
+    ],
+    legend:[
+      ['Zr\u00f3b {a} i nagraj {b}.',{a:['seri\u0119 3 manewr\u00f3w','kombinacj\u0119 burnout i drift','d\u0142ugi \u0142uk','trik z dymem','p\u0142ynn\u0105 \u00f3semk\u0119'],b:['filmik','jedno uj\u0119cie','wersj\u0119 w zwolnionym tempie','bez ci\u0119\u0107','z d\u017awi\u0119kiem','z innej perspektywy']},3],
+      ['Legendarny przejazd: {a} bez {b}.',{a:['zr\u00f3b ca\u0142y tor','zr\u00f3b 3 donuty','zr\u00f3b \u00f3semk\u0119','zr\u00f3b slalom i drift'],b:['pomy\u0142ki','dotkni\u0119cia pacho\u0142ka','przerwy','korekty','zatrzymania','cofania gazu']},3],
+      ['Wyzwanie legendy: po\u0142\u0105cz {a} z {b}.',{a:['burnout','donut','drift','sprint','cofanie','precyzj\u0119'],b:['d\u017awi\u0119kiem','precyzj\u0105','slalomem','dymem','\u0142ukiem','hamowaniem']},3],
+      ['Zadanie specjalne: {a} i zostaw {b}.',{a:['zr\u00f3b znak z oponami','narysuj \u00f3semk\u0119','zr\u00f3b wielkie k\u00f3\u0142ko','zr\u00f3b trzy \u015blady','zr\u00f3b lini\u0119'],b:['czysty \u015blad','symetryczny \u015blad','wyra\u017any dym','\u015blad na asfalcie','pami\u0105tk\u0119']},2],
+      ['Legenda dnia: {a} w stylu {b}.',{a:['zr\u00f3b popisowy przejazd','zr\u00f3b fina\u0142owy manewr','zr\u00f3b sw\u00f3j sygnaturowy trik'],b:['rajdowym','driftowym','wy\u015bcigowym','filmowym','szalonym','precyzyjnym','spokojnym','agresywnym']},2]
+    ]
+  };
+  const ART=['A','B','C','D','E'];
+  Object.keys(G).forEach(cat=>{
+    const bank = TASK_BANK[cat]; if(!bank) return;
+    const keep = bank.filter(x=>x && x.ai);               // zadania AI zostaja
+    const seen = new Set(keep.map(x=>x.t));
+    let all=[];
+    G[cat].forEach(g=>{ combos(g[0], g[1]).forEach(t=>all.push({t, d:g[2]})); });
+    // rownomiernie z kazdego szablonu (round-robin po przetasowaniu)
+    const per = G[cat].map(g=>shuffle(combos(g[0],g[1]).map(t=>({t,d:g[2]}))));
+    const out=[]; let i=0;
+    while(out.length<100 && per.some(p=>p.length>i)){
+      per.forEach(p=>{ if(p[i] && out.length<100 && !seen.has(p[i].t)){ seen.add(p[i].t); out.push({t:p[i].t,d:p[i].d,s:p[i].d*10+15,ai:null}); } });
+      i++;
+    }
+    bank.length = 0;
+    keep.forEach(x=>bank.push(x));
+    out.forEach(x=>bank.push(x));
+  });
+  if(!LS.g('bl_seen_v2',false)){ LS.s('bl_seen',[]); LS.s('bl_seen_v2',true); }
+})();
