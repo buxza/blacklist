@@ -47,12 +47,18 @@ small{color:#9aa;font-size:10px;font-weight:700;display:block;margin:4px 0}
 .tb i.hot.on{background:#FF1744;box-shadow:0 0 6px #FF1744}
 h2{font:italic 900 30px sans-serif;color:var(--o);margin:10px 0;text-shadow:0 0 10px #ff550099}
 h3{font:italic 800 13px sans-serif;letter-spacing:2px;color:var(--c);margin:16px 0 6px}
+.chip{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin:7px 0;padding:11px 12px;background:#0f0f12;color:#777;border:0;font:700 14px sans-serif;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);box-shadow:inset 0 0 0 2px #333;cursor:pointer}
+.chip.on{color:var(--c);box-shadow:inset 0 0 0 2px var(--c)}
+.chip span{font-size:20px}.chip small{color:inherit;opacity:.75;font-weight:500;font-size:11px}
 .pills{display:flex;gap:8px}.pills button{flex:1;padding:10px;border:0;background:none;color:#00F0FF;font:italic 900 16px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);cursor:pointer}
 .pills button.on{background:#00F0FF;color:#000}
 input,select,textarea{width:100%;margin:5px 0;padding:12px;background:#0f0f12;border:0;color:#fff;font:700 15px sans-serif;box-shadow:inset 0 0 0 2px #00F0FF;outline:0}
 input.up{font:italic 800 17px sans-serif;text-transform:uppercase}
 .top{display:flex;gap:10px;align-items:center}
 .x{width:40px;height:40px;border:0;background:#000;color:#00F0FF;font-size:16px;font-weight:900;box-shadow:inset 0 0 0 2px #00F0FF;cursor:pointer}
+.big2{font:italic 900 22px sans-serif}
+.sc{flex:1;text-align:center;padding:5px;box-shadow:inset 0 0 0 1.5px #00F0FF66;color:#00F0FF}.sc.a{background:#00F0FF;color:#000}.sc.a small{color:#000}
+.scs{display:flex;gap:8px;margin-top:10px}
 .card{animation:in .35s;min-height:42vh;display:flex;flex-direction:column;gap:10px}
 @keyframes in{from{transform:translateX(30px);opacity:0}}
 .tag{color:#000;font:italic 800 11px sans-serif;padding:4px 8px;display:inline-flex;align-items:center;gap:4px}
@@ -60,8 +66,14 @@ input.up{font:italic 800 17px sans-serif;text-transform:uppercase}
 .tx{font:700 20px/1.35 sans-serif;margin:4px 0;flex:1}
 .big{display:block;text-align:center;font:italic 900 44px monospace;margin:4px 0}
 .acts{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:sticky;bottom:10px;background:#050505dd;padding-top:4px}
+.sh{animation:sh .4s}@keyframes sh{20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
 .fl{position:fixed;left:0;right:0;top:38%;text-align:center;font:italic 900 54px sans-serif;text-shadow:0 0 16px currentColor;pointer-events:none;animation:fl .9s forwards;z-index:25}
 @keyframes fl{0%{transform:scale(.5);opacity:0}25%{transform:scale(1.15);opacity:1}100%{transform:translateY(-50px);opacity:0}}
+.lu{position:fixed;inset:0;background:#000e;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center}
+.lu b{font:italic 900 52px sans-serif;color:var(--o);text-shadow:0 0 18px var(--o)}
+.lu span{font:italic 900 32px sans-serif;color:var(--c)}
+.rl{display:flex;gap:10px;align-items:center;font:italic 800 16px sans-serif}.rl em{margin-left:auto;font:900 14px monospace}
+.mut{text-align:center;color:#778;font-size:11px;margin:10px 0}
 .nav3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}
 .nav3 button{padding:11px 4px;font:italic 900 13px sans-serif;border:0;background:#0f0f12;color:#fff;box-shadow:inset 0 0 0 1.5px #00F0FF;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);cursor:pointer}
 .nav3 button.on{background:#00F0FF;color:#000}
