@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - PEŁNA WERSJA (ZE WSZYSTKIMI ZADANIAMI, TRYBAMI + MAPY I GŁOS -10 KM/H)
+   BLACKLIST APP.JS - ORYGINALNA PEŁNA WERSJA + MAPY I GŁOSOWY ASYSTENT (-10 KM/H)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -95,7 +95,7 @@ const CATS={
   legend:["LEGEND","#FFFFFF","⭐","Zadania na wspomnienia"]
 };
 
-/* ===== BANK ZADAŃ (PEŁNE 900+ ZADAŃ) ===== */
+/* ===== BANK ZADAŃ ===== */
 function buildTaskBank(){
   const bank = {burn:[],drift:[],speed:[],precision:[],reverse:[],sound:[],duel:[],legend:[]};
 
@@ -185,7 +185,7 @@ let S = {
   trackWatchId: null,
   mapInstance: null,
   userMarker: null,
-  trackMapMode: 'toTrack'
+  trackMapMode: 'toTrack' // 'toTrack' (dojazd do toru) lub 'onTrack' (jazda na torze z zakrętami i głosem -10 km/h)
 };
 
 async function checkInitialGpsPermission(){
@@ -199,6 +199,11 @@ async function checkInitialGpsPermission(){
     try{
       const status = await navigator.permissions.query({name: 'geolocation'});
       S.gpsPermState = status.state;
+      if(status.state === 'granted'){
+        S.gpsMsg = 'Lokalizacja jest już aktywna. Możesz wjeżdżać!';
+      } else if(status.state === 'denied'){
+        S.gpsMsg = 'Dostęp do GPS jest zablokowany w ustawieniach przeglądarki.';
+      }
       status.onchange = () => {
         S.gpsPermState = status.state;
         if(S.scr === 'intro') render();
@@ -224,7 +229,7 @@ async function askLocationOnStart(){
       S.userLat = pos.coords.latitude;
       S.userLon = pos.coords.longitude;
       S.gpsPermState = 'granted';
-      S.gpsMsg = '✅ GPS połączony!';
+      S.gpsMsg = '✅ GPS połączony! Wjeżdżamy do garażu...';
       beep(880, 0.15);
       vib(60);
       render();
@@ -232,7 +237,9 @@ async function askLocationOnStart(){
     },
     (err) => {
       S.gpsPermState = err.code === 1 ? 'denied' : 'prompt';
-      S.gpsMsg = '⚠️ Nie udało się złapać sygnału GPS. Możesz wejść bez lokalizacji.';
+      S.gpsMsg = err.code === 1
+        ? '⚠️ Odrzucono dostęp. Włącz GPS w ustawieniach strony lub wejdź bez lokalizacji.'
+        : '⚠️ Nie udało się złapać sygnału GPS. Spróbuj ponownie lub wejdź bez lokalizacji.';
       beep(220, 0.2);
       render();
     },
@@ -245,6 +252,16 @@ function haversine(lat1, lon1, lat2, lon2){
   const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
   const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function calcBoundsArea(bounds){
+  if(!bounds) return 0;
+  const {minlat, minlon, maxlat, maxlon} = bounds;
+  const midLat = (minlat + maxlat) / 2;
+  const midLon = (minlon + maxlon) / 2;
+  const height = haversine(minlat, midLon, maxlat, midLon);
+  const width = haversine(midLat, minlon, midLat, maxlon);
+  return height * width * 0.65;
 }
 
 function formatDist(m){
@@ -266,11 +283,16 @@ async function fetchOverpassWithFallback(query){
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: 'data=' + encodeURIComponent(query)
       });
-      if(!res.ok) continue;
+      if(!res.ok){
+        lastErr = new Error(`Serwer ${new URL(url).hostname} zwrócił status ${res.status}`);
+        continue;
+      }
       return await res.json();
-    }catch(e){ lastErr = e; }
+    }catch(e){
+      lastErr = e;
+    }
   }
-  throw lastErr || new Error('Błąd serwera map.');
+  throw lastErr || new Error('Wszystkie serwery map są chwilowo przeciążone.');
 }
 
 async function findAiTracks(lat, lon, radiusKm = 30){
@@ -443,22 +465,36 @@ intro:()=>{
   return `
   <div class=c>
     ${LOGO}
-    <div class=wm>BLACKLIST</div>
+    <div class=wm>BLACKLIST <span style="font-size:14px;color:#00F0FF;background:#00f0ff22;padding:2px 6px;border-radius:4px">v0.0.1 BETA</span></div>
     <div class=sub>UPALANIE · DRIFT · AI TRACKS · GPS</div>
     <p class=q>„${S.mot}”</p>
 
     <div class="fr" style="--c:${isGranted ? '#39FF14' : '#00F0FF'};text-align:left;width:100%;max-width:380px;margin:10px 0 14px">
       <div class="row" style="margin-bottom:6px">
-        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">📍 DOSTĘP DO GPS</b>
-        <span class="tag" style="background:${isGranted ? '#39FF14' : '#00F0FF'}">${isGranted ? 'AKTYWNY' : 'WYMAGANY'}</span>
+        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">
+          📍 DOSTĘP DO LOKALIZACJI (GPS)
+        </b>
+        <span class="tag" style="background:${isGranted ? '#39FF14' : '#00F0FF'}">
+          ${isGranted ? 'AKTYWNY' : 'WYMAGANY DO MAP'}
+        </span>
       </div>
-      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">Włącz GPS, aby wyszukiwać tory i nawigować z asystentem głosowym.</p>
+      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
+        Włącz GPS, aby wyszukiwać tory i korzystać z asystenta głosowego zakrętów.
+      </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
+      
       ${isGranted ? `
-        <button class="btn gr on" style="margin:4px 0 0" onclick="A.go('home')">WCHODZĘ DO GARAŻU</button>
+        <button class="btn gr on" style="margin:4px 0 0" onclick="A.go('home')">
+          WCHODZĘ DO GARAŻU
+          <small>GPS aktywny</small>
+        </button>
       ` : `
-        <button class="btn cy on" style="margin:4px 0 8px" ${isReq ? 'disabled' : ''} onclick="askLocationOnStart()">📍 UDOSTĘPNIJ GPS I WEJDŹ</button>
-        <button class="btn w" style="margin:0;opacity:.8;font-size:12px;padding:9px" onclick="A.go('home')">POMIŃ I WEJDŹ BEZ GPS →</button>
+        <button class="btn cy on" style="margin:4px 0 8px" ${isReq ? 'disabled' : ''} onclick="askLocationOnStart()">
+          ${isReq ? '⏳ OCZEKIWANIE NA ZGODĘ...' : '📍 UDOSTĘPNIJ LOKALIZACJĘ I WEJDŹ'}
+        </button>
+        <button class="btn w" style="margin:0;opacity:.8;font-size:12px;padding:9px" onclick="A.go('home')">
+          POMIŃ I WEJDŹ BEZ GPS →
+        </button>
       `}
     </div>
   </div>`;
@@ -468,7 +504,7 @@ home:()=>`
 <div style="text-align:center;padding-top:4px">
   ${LOGO}
   <div class=wm>BLACKLIST</div>
-  <div style="margin:2px 0 6px"><span style="font:italic 800 11px monospace;background:#FF550033;color:#FF5500;padding:2px 8px;border:1px solid #FF5500">v0.0.1 BETA + MAPY TORU</span></div>
+  <div style="margin:2px 0 6px"><span style="font:italic 800 11px monospace;background:#FF550033;color:#FF5500;padding:2px 8px;border:1px solid #FF5500">APLIKACJA v0.0.1 BETA</span></div>
   <div class=sub>UPALANIE · DRIFT · AI TRACKS · GŁOS</div>
 </div>
 ${prof()}
@@ -477,12 +513,16 @@ ${prof()}
   <button onclick="A.openVideos()">🎬 WIDEO</button>
   <button onclick="A.openRank()">🏆 RANKING</button>
 </div>
-<button class="btn on" onclick="A.go('tracks')" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
+<button class="btn cy" onclick="A.go('tracks')" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
   🏁 AI TOR / TRASA + MAPY & GŁOS <span style="font-size:9px;background:#00f0ff22;color:#00F0FF;padding:1px 4px">BETA</span>
   <small>Dojazd do toru + Asystent zakrętów (-10 km/h)</small>
 </button>
 <button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
 <button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
+<button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
+  🥷 ZNAJDŹ ASFALT NA BĄCZKA <span style="font-size:9px;background:#39FF1422;color:#39FF14;padding:1px 4px">BETA</span> ${S.places.length ? `(${S.places.length})` : ''}
+  <small>Szukaj ustronnych spotów RWD</small>
+</button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
   <button style="color:#FF1744" onclick="A.go('admin')">🛡️ ADMIN</button>
@@ -608,6 +648,27 @@ tracks:()=>{
     `).join('')}
   ` : ''}
   `;
+},
+
+places:()=>{
+  return `
+  <div class=top>
+    <button class=x onclick="A.go('home')">‹</button>
+    <h2 style="font-size:20px;margin:0;flex:1">🥷 SPOTY RWD <span style="font-size:10px;color:#FFD400">[BETA]</span></h2>
+  </div>
+  ${S.places.map((p,i)=>`
+    <div class=fr style="--c:${p.stealthColor};padding:12px 14px">
+      <div class=row>
+        <b style="color:${p.stealthColor}">#${i+1}</b>
+        <span style="font:700 14px sans-serif;flex:1;margin:0 8px">${esc(p.name)}</span>
+        <em style="color:#00F0FF">${formatDist(p.dist)}</em>
+      </div>
+      <div class=pills style="margin-top:8px">
+        <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
+      </div>
+    </div>
+  `).join('')}
+  `;
 }
 };
 
@@ -652,7 +713,7 @@ function initMapLeaflet(){
 
   if(active.corners){
     active.corners.forEach((c, idx) => {
-      let safeSpd = Math.max(30, c.baseSpeed - 10); // Zaniżone o 10 km/h dla bezpieczeństwa
+      let safeSpd = Math.max(30, c.baseSpeed - 10); // Bezpieczna prędkość zaniżona o 10 km/h
       let color = c.severity >= 5 ? '#FF1744' : c.severity >= 4 ? '#FF5500' : '#39FF14';
       
       const customIcon = L.divIcon({
@@ -848,6 +909,25 @@ const A = {
   },
 
   openExternalNav(lat, lon){
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
+  },
+
+  async findPlaces(radiusKm = 25){
+    S.placesRadius = radiusKm;
+    S.placesLoading = true;
+    A.go('places');
+    try{
+      const freshList = await findNearbyPlacards(S.userLat, S.userLon, radiusKm);
+      S.places = freshList;
+      LS.s('bl_saved_places', S.places);
+      S.placesLoading = false;
+      render();
+    }catch(e){
+      S.placesLoading = false;
+      render();
+    }
+  },
+  openMaps(lat, lon){
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
   }
 };
