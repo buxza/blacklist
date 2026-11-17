@@ -3,7 +3,7 @@
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
-  pass: 'NITRO#2026'
+  pass: ''
 };
 
 const DEFAULT_CLOUD = {
@@ -1599,5 +1599,438 @@ const HEAT = {
     </div>`;
   };
   render = function(){ oR(); try{ HEAT.draw(); }catch(e){} };
+})();
+render();
+
+
+/* ============================================================================
+   DODATEK 8: (6) lepszy filtr torow AI + oznaczanie "prawdziwy tor"
+              (7) +30 recznych zadan na kategorie
+              (8) tryb offline (service worker + mapa rysowana lokalnie)
+              (9) admin: haslo sprawdzane przez hash, przycisk ukryty
+   ============================================================================ */
+
+/* ---------- (6) FILTR TOROW ---------- */
+const REAL = {
+  ids: LS.g('bl_real_tracks', []),
+  has(id){ return REAL.ids.indexOf(id) >= 0; },
+  toggle(id){
+    const i = REAL.ids.indexOf(id);
+    if(i >= 0) REAL.ids.splice(i,1); else REAL.ids.push(id);
+    LS.s('bl_real_tracks', REAL.ids);
+    S.tracks.sort((a,b)=> (REAL.has(b.id)?1:0)-(REAL.has(a.id)?1:0) || a.distFromUser-b.distFromUser);
+    LS.s('bl_saved_tracks', S.tracks);
+    render();
+  }
+};
+
+findAiTracks = async function(lat, lon, radiusKm = 30){
+  const radius = Math.round(radiusKm * 1000);
+  const query = `
+[out:json][timeout:30];
+way["highway"~"^(secondary|tertiary|unclassified)$"]["surface"~"^(asphalt|paved)$"]["access"!~"^(private|no)$"](around:${radius},${lat},${lon});
+out geom;
+`;
+  const data = await fetchOverpassWithFallback(query);
+  let cand = [];
+  for(const el of (data.elements || [])){
+    if(!el.geometry || el.geometry.length < 3) continue;
+    const tags = el.tags || {};
+    if(tags.lit === 'yes' || tags.junction === 'roundabout') continue;     // miasto / rondo
+    if(tags.sidewalk && tags.sidewalk !== 'no' && tags.sidewalk !== 'none') continue; // chodniki = zabudowa
+    const ms = parseInt(tags.maxspeed, 10);
+    if(!isNaN(ms) && ms <= 40) continue;                                  // strefy wolnego ruchu
+    let len = 0;
+    for(let i = 0; i < el.geometry.length - 1; i++){
+      const p1 = el.geometry[i], p2 = el.geometry[i+1];
+      len += haversine(p1.lat, p1.lon, p2.lat, p2.lon);
+    }
+    if(len < 3000 || len > 30000) continue;
+    const g = el.geometry;
+    cand.push({el, tags, len, g, start:g[0], end:g[g.length-1], mid:g[Math.floor(g.length/2)],
+               dist: haversine(lat, lon, g[0].lat, g[0].lon), bld: null});
+  }
+  cand.sort((a,b)=>a.dist-b.dist);
+  cand = cand.slice(0, 20);
+
+  // zabudowa: liczymy budynki przy poczatku, srodku i koncu trasy (jedno zapytanie)
+  try{
+    if(cand.length){
+      const parts = [];
+      cand.forEach(c=>{ [c.start,c.mid,c.end].forEach(p=>{ parts.push(`way["building"](around:80,${p.lat},${p.lon});`); }); });
+      const bd = await fetchOverpassWithFallback(`[out:json][timeout:30];(${parts.join('')});out center;`);
+      const bl = (bd.elements || []).filter(b=>b.center);
+      cand.forEach(c=>{
+        let n = 0;
+        [c.start,c.mid,c.end].forEach(p=>{ bl.forEach(b=>{ if(haversine(p.lat,p.lon,b.center.lat,b.center.lon) <= 90) n++; }); });
+        c.bld = n;
+      });
+    }
+  }catch(e){ /* brak danych o zabudowie: zostaje sam podstawowy filtr */ }
+
+  let ok = cand.filter(c=>c.bld == null || c.bld <= 25);
+  if(ok.length < 3) ok = cand.slice().sort((a,b)=>(a.bld==null?0:a.bld)-(b.bld==null?0:b.bld)).slice(0,6);
+
+  const tracks = ok.map(c=>({
+    id: 'track_' + c.el.id,
+    name: c.tags.name || c.tags.ref || `Tor / Trasa RWD (${Math.round(c.len/1000)} km)`,
+    length: Math.round(c.len),
+    distFromUser: c.dist,
+    start: {lat:c.start.lat, lon:c.start.lon},
+    mid: {lat:c.mid.lat, lon:c.mid.lon},
+    end: {lat:c.end.lat, lon:c.end.lon},
+    geometry: c.g,
+    buildings: c.bld
+  }));
+  tracks.sort((a,b)=> (REAL.has(b.id)?1:0)-(REAL.has(a.id)?1:0) || a.distFromUser-b.distFromUser);
+  return tracks.slice(0, 6);
+};
+
+(function(){
+  const oTr = V.tracks;
+  V.tracks = function(){
+    let h = oTr();
+    // przycisk "prawdziwy tor" na kazdej karcie listy
+    h = h.replace(/<button onclick="A\.selectTrack\('([^']+)'\)"/g, (m,id)=>
+      `<button onclick="REAL.toggle('${id}')" style="flex:1">${REAL.has(id)?'\u2705 PRAWDZIWY':'\u2b50 OZNACZ'}</button>`+m);
+    // plakietka przy nazwie
+    h = h.replace(/(<b style="color:#00F0FF">#\d+ )([^<]*)(<\/b>)/g, (m,a,name,c)=>{
+      const t = S.tracks.find(x=>esc(x.name)===name);
+      const real = t && REAL.has(t.id);
+      const info = t && t.buildings!=null ? ` <span style="font-size:10px;color:${t.buildings<=8?'#39FF14':'#FFD400'}">(${t.buildings<=8?'pusto':'troch\u0119 zabudowy'})</span>` : '';
+      return a + name + (real?' <span style="font-size:10px;color:#39FF14">\u2705 TOR</span>':'') + info + c;
+    });
+    return h;
+  };
+})();
+
+/* ---------- (7) +30 RECZNYCH ZADAN NA KATEGORIE ---------- */
+(function(){
+  const H = {
+    burn:[
+      'Zr\u00f3b burnout i zatrzymaj auto tak, \u017ceby \u015blad dymu zaczyna\u0142 si\u0119 przy pacho\u0142ku.',
+      'Wykonaj kr\u00f3tki burnout, pu\u015b\u0107 gaz i od razu ruszaj p\u0142ynnie prosto.',
+      'Rozgrzej opony: trzy kr\u00f3tkie burnouty z przerw\u0105 na zatrzymanie.',
+      'Zr\u00f3b donut w lewo, a zaraz po nim donut w prawo.',
+      'Wykonaj donut, w kt\u00f3rym prz\u00f3d auta ca\u0142y czas celuje w pacho\u0142ek.',
+      'Zr\u00f3b burnout na jednym biegu i zako\u0144cz go dok\u0142adnie na linii.',
+      'Zostaw \u015blad opon w kszta\u0142cie litery C.',
+      'Utrzymaj sta\u0142y dym przez ca\u0142y p\u00f3\u0142okr\u0105g wok\u00f3\u0142 pacho\u0142ka.',
+      'Zr\u00f3b burnout i podczas niego delikatnie skr\u0119\u0107 kierownic\u0119 w lewo.',
+      'Zr\u00f3b burnout i podczas niego delikatnie skr\u0119\u0107 kierownic\u0119 w prawo.',
+      'Wykonaj dwa donuty tak, \u017ceby drugi by\u0142 mniejszy od pierwszego.',
+      'Zr\u00f3b donut i wyjed\u017a z niego prosto bez \u017cadnej korekty.',
+      'Zacznij burnout z miejsca i sko\u0144cz go po 5 sekundach, bez d\u0142u\u017cszego dymu.',
+      'Zr\u00f3b ma\u0142y donut wok\u00f3\u0142 pacho\u0142ka z odleg\u0142o\u015bci\u0105 max 1 m od niego.',
+      'Zr\u00f3b burnout, zatrzymaj si\u0119 i od razu powt\u00f3rz go w drug\u0105 stron\u0119.',
+      'Narysuj oponami wielkie O na placu.',
+      'Zr\u00f3b burnout i wyjed\u017a z niego w stron\u0119 pacho\u0142ka oddalonego o 20 m.',
+      'Wykonaj donut z r\u00f3wnym tempem i bez zatrzymywania si\u0119 w po\u0142owie.',
+      'Wykonaj burnout, w kt\u00f3rym auto stoi dok\u0142adnie w jednej linii z pacho\u0142kiem.',
+      'Zr\u00f3b donut, w kt\u00f3rym zmieniasz kierunek co jedno k\u00f3\u0142ko.',
+      'Zr\u00f3b burnout i po nim ruszaj bez \u017cadnego po\u015blizgu.',
+      'Zr\u00f3b p\u00f3\u0142kole z dymem, a potem szybko wyprostuj tor jazdy.',
+      'Wykonaj burnout i zatrzymaj si\u0119 mask\u0105 do pacho\u0142ka.',
+      'Zr\u00f3b dwa k\u00f3\u0142ka w lewo i jedno w prawo bez zatrzymania.',
+      'Wypal opony tak, by \u015blad mia\u0142 r\u00f3wn\u0105 grubo\u015b\u0107 na ca\u0142ej d\u0142ugo\u015bci.',
+      'Zr\u00f3b donut wok\u00f3\u0142 w\u0142asnego \u015bladu z poprzedniej pr\u00f3by.',
+      'Zr\u00f3b burnout i zako\u0144cz go p\u0142ynnym, spokojnym zatrzymaniem.',
+      'Wykonaj burnout na luzie, a potem wrzu\u0107 bieg i ruszaj dalej.',
+      'Zr\u00f3b donut w czasie kr\u00f3tszym ni\u017c 10 sekund.',
+      'Zr\u00f3b dwa donuty i zako\u0144cz je w tym samym punkcie, w kt\u00f3rym zacz\u0105\u0142e\u015b.'
+    ],
+    drift:[
+      'Zr\u00f3b \u0142uk w po\u015blizgu i zatrzymaj tylny zderzak przy pacho\u0142ku.',
+      'Przejed\u017a w po\u015blizgu obok dw\u00f3ch pacho\u0142k\u00f3w, nie dotykaj\u0105c ich.',
+      'Wykonaj d\u0142ugi po\u015blizg po okr\u0119gu przez pe\u0142ne dwa k\u00f3\u0142ka.',
+      'Wejd\u017a w \u0142uk w lewo, a po wyj\u015bciu od razu zr\u00f3b \u0142uk w prawo.',
+      'Zr\u00f3b po\u015blizg i utrzymaj ten sam k\u0105t przez ca\u0142y zakr\u0119t.',
+      'Wykonaj p\u0142ynn\u0105 zmian\u0119 kierunku w \u00f3semce, bez chwili prostej jazdy.',
+      'Zr\u00f3b \u0142uk w po\u015blizgu i wyjed\u017a dok\u0142adnie w osi placu.',
+      'Zr\u00f3b driftowy zakr\u0119t o 90 stopni wok\u00f3\u0142 pacho\u0142ka.',
+      'Zr\u00f3b driftowy zakr\u0119t o 180 stopni, ko\u0144cz\u0105c w przeciwn\u0105 stron\u0119 ni\u017c start.',
+      'Wykonaj po\u015blizg z wej\u015bciem od odci\u0105\u017cenia ty\u0142u.',
+      'Zr\u00f3b po\u015blizg z wej\u015bciem z hamulca r\u0119cznego i szybko go opanuj.',
+      'Utrzymaj po\u015blizg na ca\u0142ej d\u0142ugo\u015bci \u0142uku bez cofania gazu.',
+      'Zr\u00f3b po\u015blizg i podjed\u017a jak najbli\u017cej pacho\u0142ka, nie dotykaj\u0105c go.',
+      'Przejed\u017a cztery pacho\u0142ki w linii w po\u015blizgu, zmieniaj\u0105c stron\u0119 przy ka\u017cdym.',
+      'Wykonaj dwa zakr\u0119ty w po\u015blizgu bez zatrzymania mi\u0119dzy nimi.',
+      'Zr\u00f3b po\u015blizg i na jego ko\u0144cu ustaw auto prosto w stron\u0119 pacho\u0142ka.',
+      'Zr\u00f3b po\u015blizg przy ma\u0142ej pr\u0119dko\u015bci, ale z du\u017cym k\u0105tem.',
+      'Zr\u00f3b po\u015blizg z wyj\u015bciem na prost\u0105 i p\u0142ynnym dodaniem gazu.',
+      'Wykonaj dwa po\u015blizgi z rz\u0119du w tym samym kierunku.',
+      'Zr\u00f3b \u0142uk w po\u015blizgu tak, by tylne ko\u0142o przesz\u0142o blisko pacho\u0142ka.',
+      'Zr\u00f3b po\u015blizg, a po nim zatrzymaj si\u0119 r\u00f3wno na linii.',
+      'Zr\u00f3b ciasny okr\u0105g w po\u015blizgu wok\u00f3\u0142 jednego pacho\u0142ka.',
+      'Zr\u00f3b szeroki okr\u0105g w po\u015blizgu wok\u00f3\u0142 dw\u00f3ch pacho\u0142k\u00f3w.',
+      'Zr\u00f3b zakr\u0119t w po\u015blizgu, w kt\u00f3rym kierownica prawie si\u0119 nie rusza.',
+      'Wejd\u017a w po\u015blizg z pr\u0119dko\u015bci 30 km/h i utrzymaj go przez 3 sekundy.',
+      'Wykonaj p\u0142ynn\u0105 seri\u0119 trzech po\u015blizg\u00f3w w trzech kierunkach.',
+      'Zr\u00f3b po\u015blizg i wyjed\u017a z niego wolniej, ni\u017c wszed\u0142e\u015b.',
+      'Zr\u00f3b po\u015blizg i wyjed\u017a z niego szybciej, ni\u017c wszed\u0142e\u015b.',
+      'Zr\u00f3b po\u015blizg w kszta\u0142cie litery S.',
+      'Wykonaj najpi\u0119kniejszy po\u015blizg, na jaki ci\u0119 sta\u0107, i oce\u0144 go w skali 1 do 10.'
+    ],
+    speed:[
+      'Przyspiesz na odcinku 80 m i wyhamuj przed lini\u0105.',
+      'Zr\u00f3b start z miejsca i zatrzymaj si\u0119 na polu o d\u0142ugo\u015bci 5 m.',
+      'Przejed\u017a prost\u0105 z jak najbardziej r\u00f3wnym przyspieszeniem.',
+      'Zr\u00f3b sprint na 50 m i zatrzymaj si\u0119 bez po\u015blizgu.',
+      'Przyspiesz do 3. biegu i p\u0142ynnie zwolnij do zatrzymania.',
+      'Zr\u00f3b dwa starty z rz\u0119du, drugi lepszy od pierwszego.',
+      'Wystartuj tak, \u017ceby prz\u00f3d auta nie uni\u00f3s\u0142 si\u0119 od gazu.',
+      'Wystartuj i przejed\u017a 60 m w czasie poni\u017cej 6 sekund.',
+      'Zr\u00f3b start, zmie\u0144 bieg i wyhamuj przy pacho\u0142ku.',
+      'Przyspiesz i zahamuj do zatrzymania jak najkr\u00f3cej, bez blokowania k\u00f3\u0142.',
+      'Przejed\u017a odcinek 100 m z czasem ustalonym przez koleg\u0119.',
+      'Przejed\u017a prost\u0105 i zatrzymaj si\u0119 r\u00f3wno z rywalem.',
+      'Zr\u00f3b dwa szybkie przejazdy w obie strony po tym samym odcinku.',
+      'Pokonaj prosty odcinek tak, by obroty zmienia\u0142y si\u0119 r\u00f3wno.',
+      'Wystartuj i utrzymaj sta\u0142\u0105 pr\u0119dko\u015b\u0107 przez 5 sekund.',
+      'Wystartuj z miejsca i zatrzymaj si\u0119 na linii, nie przekraczaj\u0105c jej.',
+      'Zr\u00f3b sprint, a po nim zawr\u00f3\u0107 w p\u00f3\u0142obrocie.',
+      'Przyspiesz i p\u0142ynnie wyhamuj tak, by nikt w aucie nie poczu\u0142 szarpni\u0119cia.',
+      'Zr\u00f3b sprint z odcinkiem 30 m na 1. biegu i 30 m na 2.',
+      'Przejed\u017a 40 m jak najszybciej, a drugie 40 m jak najwolniej.',
+      'Zr\u00f3b szybki start w bok od linii i szybko wyprostuj tor jazdy.',
+      'Wykonaj hamowanie awaryjne ze \u015bredniej pr\u0119dko\u015bci w wyznaczonym miejscu.',
+      'Przejed\u017a prost\u0105, zachowuj\u0105c pr\u0119dko\u015b\u0107, a na ko\u0144cu zatrzymaj si\u0119 p\u0142ynnie.',
+      'Zr\u00f3b start, przyspieszenie i hamowanie w czasie poni\u017cej 12 sekund.',
+      'Przejed\u017a dwa razy ten sam odcinek z r\u00f3\u017cnic\u0105 czasu poni\u017cej 0,5 s.',
+      'Zr\u00f3b sprint, w kt\u00f3rym przez ca\u0142y czas patrzysz na wska\u017anik pr\u0119dko\u015bci raz na sekund\u0119.',
+      'Przyspiesz do wybranej pr\u0119dko\u015bci i utrzymaj j\u0105 przez 50 m.',
+      'Pokonaj odcinek tak szybko, jak potrafisz, ale bez piszczenia opon.',
+      'Zr\u00f3b szybki start i hamowanie na wyznaczonym polu o szeroko\u015bci 3 m.',
+      'Zr\u00f3b szybki przejazd i sprawd\u017a, czy kolega mierzy ten sam czas.'
+    ],
+    precision:[
+      'Zatrzymaj przednie ko\u0142o na wyznaczonej linii.',
+      'Zaparkuj ty\u0142em w polu o szeroko\u015bci auta plus 50 cm.',
+      'Przejed\u017a mi\u0119dzy dwoma pacho\u0142kami z zapasem po 20 cm z ka\u017cdej strony.',
+      'Zr\u00f3b slalom wok\u00f3\u0142 6 pacho\u0142k\u00f3w, nie dotykaj\u0105c \u017cadnego.',
+      'Zr\u00f3b slalom w obie strony na jednym oddechu.',
+      'Zatrzymaj auto tak, by zderzak dotkn\u0105\u0142 ta\u015bmy na wysoko\u015bci maski.',
+      'Przejed\u017a po linii namalowanej kred\u0105 bez zje\u017cd\u017cania na bok.',
+      'Wjed\u017a do pola i zatrzymaj si\u0119 dok\u0142adnie w jego \u015brodku.',
+      'Zr\u00f3b zawracanie na 3 ruchy w polu o szeroko\u015bci 6 m.',
+      'Zawr\u00f3\u0107 w jednym ruchu na w\u0105skiej drodze oznaczonej pacho\u0142kami.',
+      'Przejed\u017a w\u0105sk\u0105 bramk\u0119 ty\u0142em, a potem przodem.',
+      'Ustaw auto r\u00f3wnolegle do linii w odleg\u0142o\u015bci 20 cm od niej.',
+      'Obiecaj sobie wynik: zatrzymaj si\u0119 dok\u0142adnie na znaczniku, bez korekty.',
+      'Zr\u00f3b slalom na jedynce, a potem na dw\u00f3jce i por\u00f3wnaj \u015blady.',
+      'Przejed\u017a \u00f3semk\u0119 wok\u00f3\u0142 dw\u00f3ch pacho\u0142k\u00f3w bez dotykania.',
+      'Zatrzymaj tylne ko\u0142o dok\u0142adnie na wyznaczonym punkcie.',
+      'Przejed\u017a przez korytarz z pacho\u0142k\u00f3w z pr\u0119dko\u015bci\u0105 do 10 km/h.',
+      'Zatrzymaj auto r\u00f3wno ze znacznikiem, a potem cofnij o 1 m.',
+      'Przejed\u017a \u0142uk po wyznaczonej ta\u015bmie, nie wychodz\u0105c poza ni\u0105.',
+      'Zaparkuj przodem w polu, a potem wyjed\u017a z niego bez cofania.',
+      'Wjed\u017a w w\u0105skie pole i zatrzymaj si\u0119 bez dotykania kraw\u0119dzi.',
+      'Wjed\u017a na lini\u0119 startu z b\u0142\u0119dem mniejszym ni\u017c 10 cm.',
+      'Zr\u00f3b slalom z zamkni\u0119tymi oczami... w wyobra\u017ani. W praktyce: powoli i bez dotykania.',
+      'Zr\u00f3b okr\u0105\u017cenie dooko\u0142a placu, trzymaj\u0105c sta\u0142y dystans od kraw\u0119dzi.',
+      'Zatrzymaj si\u0119 bokiem do pacho\u0142ka w odleg\u0142o\u015bci 30 cm.',
+      'Przejed\u017a cztery pacho\u0142ki w linii, zmieniaj\u0105c stron\u0119 przy ka\u017cdym.',
+      'Zr\u00f3b trzy zatrzymania w trzech wyznaczonych punktach z rz\u0119du.',
+      'Wjed\u017a w bramk\u0119 z dw\u00f3ch pacho\u0142k\u00f3w pod k\u0105tem 45 stopni.',
+      'Pokonaj tor precyzyjny bez ani jednego dotkni\u0119cia pacho\u0142ka.',
+      'Powt\u00f3rz ten sam przejazd trzy razy, z jak najmniejsz\u0105 r\u00f3\u017cnic\u0105 w \u015bladzie.'
+    ],
+    reverse:[
+      'Cofaj po prostej linii na dystansie 30 m bez korekt.',
+      'Cofaj i zatrzymaj si\u0119 zderzakiem przy pacho\u0142ku.',
+      'Cofaj po \u0142uku w lewo i zatrzymaj si\u0119 na linii.',
+      'Cofaj po \u0142uku w prawo i zatrzymaj si\u0119 na linii.',
+      'Cofaj slalomem mi\u0119dzy 4 pacho\u0142kami.',
+      'Zr\u00f3b ty\u0142em \u00f3semk\u0119 wok\u00f3\u0142 dw\u00f3ch pacho\u0142k\u00f3w.',
+      'Wykonaj zawracanie wahad\u0142owe ty\u0142em po \u0142uku.',
+      'Cofaj z du\u017c\u0105 pr\u0119dko\u015bci\u0105 i zahamuj p\u0142ynnie przed lini\u0105.',
+      'Cofaj ty\u0142em przez bramk\u0119 z pacho\u0142k\u00f3w bez dotykania.',
+      'Zr\u00f3b ty\u0142em pe\u0142ne k\u00f3\u0142ko wok\u00f3\u0142 pacho\u0142ka.',
+      'Cofaj na dystansie 20 m, patrz\u0105c tylko przez boczne lusterka.',
+      'Cofaj na dystansie 20 m, patrz\u0105c przez tyln\u0105 szyb\u0119.',
+      'Zr\u00f3b manewr \u201eJ\u201d: cofnij i obr\u00f3\u0107 auto o 180 stopni.',
+      'Zr\u00f3b p\u00f3\u0142obr\u00f3t w ruchu wstecznym i jed\u017a przodem.',
+      'Cofaj z miejsca do punktu oddalonego o 40 m w czasie poni\u017cej 12 s.',
+      'Cofaj w po\u015blizgu po \u0142agodnym \u0142uku.',
+      'Cofaj tak, by ty\u0142 auta min\u0105\u0142 pacho\u0142ek w odleg\u0142o\u015bci 20 cm.',
+      'Cofaj i zatrzymaj si\u0119 dok\u0142adnie w polu o d\u0142ugo\u015bci 4 m.',
+      'Cofaj slalomem, a potem wyjed\u017a przodem t\u0105 sam\u0105 tras\u0105.',
+      'Zr\u00f3b ty\u0142em szeroki \u0142uk wok\u00f3\u0142 dw\u00f3ch pacho\u0142k\u00f3w.',
+      'Cofnij si\u0119 10 m, potem 10 m przodem, potem zn\u00f3w ty\u0142em.',
+      'Cofaj do bramki, zatrzymaj si\u0119 i wyjed\u017a przodem bez cofania.',
+      'Zr\u00f3b ty\u0142em kr\u00f3tki sprint z p\u0142ynnym hamowaniem.',
+      'Cofaj r\u00f3wnolegle do linii w odleg\u0142o\u015bci 30 cm od niej.',
+      'Wykonaj dwa zawracania ty\u0142em pod rz\u0105d.',
+      'Cofaj po okr\u0119gu o \u015brednicy 15 m.',
+      'Cofnij si\u0119 do pacho\u0142ka i dotknij go lusterkiem... w teorii. W praktyce: zatrzymaj si\u0119 10 cm przed nim.',
+      'Zr\u00f3b ty\u0142em \u0142uk w kszta\u0142cie litery S.',
+      'Zawr\u00f3\u0107 ty\u0142em na w\u0105skiej drodze w jednym p\u0142ynnym ruchu.',
+      'Zr\u00f3b seri\u0119: cofni\u0119cie, p\u00f3\u0142obr\u00f3t, sprint do przodu, hamowanie.'
+    ],
+    sound:[
+      'Zagraj trzy kr\u00f3tkie odci\u0119cia, jedno d\u0142ugie i zn\u00f3w trzy kr\u00f3tkie.',
+      'Utrzymaj obroty na sta\u0142ym poziomie przez 5 sekund.',
+      'Zr\u00f3b p\u0142ynne podniesienie obrot\u00f3w od wolnych do wysokich w 3 sekundy.',
+      'Zr\u00f3b rytm: raz, dwa, trzy, pauza, raz, dwa, trzy.',
+      'Zagraj wydechem co\u015b w rodzaju melodii gazem.',
+      'Zr\u00f3b seri\u0119 szybkich odci\u0119\u0107 w r\u00f3wnym tempie.',
+      'Zr\u00f3b jedno bardzo d\u0142ugie odci\u0119cie i oce\u0144, jak brzmi.',
+      'Zr\u00f3b odci\u0119cie, cisz\u0119 przez 2 sekundy i znowu odci\u0119cie.',
+      'Podkr\u0119\u0107 obroty i p\u0142ynnie je opu\u015b\u0107, nie dotykaj\u0105c sprz\u0119g\u0142a.',
+      'Zagraj dwa mocne gazy i jeden delikatny.',
+      'Zr\u00f3b odci\u0119cie na ka\u017cdym kolejnym biegu podczas przyspieszania.',
+      'Zr\u00f3b kr\u00f3tki koncert: 10 sekund d\u017awi\u0119k\u00f3w wydechu bez przerwy.',
+      'Zr\u00f3b echo: zagraj fraz\u0119, a kolega j\u0105 powt\u00f3rzy.',
+      'Zagraj wydechem rytm znanej piosenki.',
+      'Zr\u00f3b odci\u0119cie w tunelu albo przy \u015bcianie, \u017ceby mocniej s\u0142ycha\u0107 by\u0142o echo.',
+      'Zr\u00f3b d\u017awi\u0119k narastaj\u0105cy: cichy, \u015bredni, g\u0142o\u015bny, i z powrotem.',
+      'Zr\u00f3b pi\u0119\u0107 odci\u0119\u0107 w r\u00f3wnych odst\u0119pach co p\u00f3\u0142 sekundy.',
+      'Zr\u00f3b odci\u0119cie w czasie wolnego przejazdu przez bramk\u0119.',
+      'Zr\u00f3b jedno odci\u0119cie na starcie i drugie w po\u0142owie prostej.',
+      'Zr\u00f3b odci\u0119cie podczas hamowania i oce\u0144, jak brzmi.',
+      'Utrzymaj obroty na granicy odci\u0119cia przez 2 sekundy.',
+      'Zagraj \u201epytanie i odpowied\u017a\u201d dwoma r\u00f3\u017cnymi gazami.',
+      'Zr\u00f3b seri\u0119 ostrych, kr\u00f3tkich gaz\u00f3w po kolei na ka\u017cdym biegu.',
+      'Wykonaj d\u017awi\u0119k, kt\u00f3ry kolega rozpozna jako rytm marszu.',
+      'Zr\u00f3b cichy przejazd z zerowym gazem, a potem jedno g\u0142o\u015bne odci\u0119cie.',
+      'Zr\u00f3b odci\u0119cie, kt\u00f3re ko\u0144czy si\u0119 dok\u0142adnie, gdy mijasz pacho\u0142ek.',
+      'Zr\u00f3b r\u00f3wn\u0105 fal\u0119 d\u017awi\u0119ku: w g\u00f3r\u0119 przez 2 s i w d\u00f3\u0142 przez 2 s.',
+      'Zr\u00f3b dwa odci\u0119cia, po kt\u00f3rych natychmiast nast\u0119puje cisza.',
+      'Zagraj fina\u0142owy gaz, kt\u00f3ry ko\u0144czy ca\u0142\u0105 seri\u0119.',
+      'Zr\u00f3b sound check na trzech r\u00f3\u017cnych obrotach i wybierz najlepszy.'
+    ],
+    duel:[
+      'Duel: kto zatrzyma auto bli\u017cej linii, wygrywa rund\u0119.',
+      'Duel: kto zrobi d\u0142u\u017cszy \u015blad dymu, wygrywa.',
+      'Duel: kto przejedzie slalom szybciej, wygrywa punkt.',
+      'Duel: kto zrobi \u0142adniejszy po\u015blizg, wybiera niezale\u017cny s\u0119dzia.',
+      'Duel: zr\u00f3bcie po jednym donucie i por\u00f3wnajcie symetri\u0119.',
+      'Duel: sprint na 60 m, pierwszy przy pacho\u0142ku wygrywa.',
+      'Duel: precyzyjne parkowanie ty\u0142em, wygrywa mniejsza odleg\u0142o\u015b\u0107 od linii.',
+      'Duel: ten, kto zrobi najcia\u015bniejszy okr\u0105g, dostaje punkt.',
+      'Duel: kto cofnie po prostej bez korekt, wygrywa.',
+      'Duel: kto zagra ciekawszy rytm wydechem, wybiera g\u0142osowanie.',
+      'Duel: najkr\u00f3tsza droga hamowania ze sta\u0142ej pr\u0119dko\u015bci.',
+      'Duel: kto zrobi d\u0142u\u017cszy po\u015blizg bez straty kontroli.',
+      'Duel: pojedynek na \u00f3semki, wygrywa lepsza i p\u0142ynniejsza.',
+      'Duel: slalom ty\u0142em na czas.',
+      'Duel: kto z was zrobi \u0142adniejszy start, wygrywa rund\u0119.',
+      'Duel: dwie rundy, ten sam manewr, wygrywa mniejszy b\u0142\u0105d.',
+      'Duel: kto dok\u0142adniej trafi w znacznik, dostaje punkt.',
+      'Duel: wy\u015bcig dw\u00f3ch aut do pacho\u0142ka i z powrotem.',
+      'Duel: kto utrzyma d\u0142u\u017cszy dym, dostaje 2 punkty.',
+      'Duel: kto zrobi szybsze zawracanie na w\u0105skiej drodze, wygrywa.',
+      'Duel: kto zagra d\u0142u\u017csze odci\u0119cie, wygrywa rund\u0119.',
+      'Duel: duel parkowania, wygrywa mniejszy odst\u0119p od kraw\u0119\u017cnika.',
+      'Duel: ten, kto pierwszy pope\u0142ni b\u0142\u0105d, odpada.',
+      'Duel: pojedynek stylu, a wynik ustala trzecia osoba.',
+      'Duel: obaj robicie ten sam przejazd, wygrywa r\u00f3wniejszy czas.',
+      'Duel: kto zrobi dok\u0142adniejsze p\u00f3\u0142kole, wygrywa punkt.',
+      'Duel: fina\u0142, jedna pr\u00f3ba, jeden manewr, wybierasz go ty.',
+      'Duel: remis? Dogrywka na jednym wsp\u00f3lnym manewrze.',
+      'Duel: wygrywa ten, kto zrobi najbardziej p\u0142ynn\u0105 zmian\u0119 kierunku.',
+      'Duel: seria trzech konkurencji, wygrywa ten, kto wygra co najmniej dwie.'
+    ],
+    legend:[
+      'Zr\u00f3b kombinacj\u0119: burnout, donut, po\u015blizg i p\u0142ynne zatrzymanie.',
+      'Zr\u00f3b ca\u0142y tor i nagraj go w jednym uj\u0119ciu, bez ci\u0119\u0107.',
+      'Wykonaj sw\u00f3j podpis oponami na placu.',
+      'Zr\u00f3b po\u015blizg w kszta\u0142cie litery S i nagraj z g\u00f3ry.',
+      'Zr\u00f3b \u00f3semk\u0119 z dymem i nagraj j\u0105 w zwolnionym tempie.',
+      'Zr\u00f3b przejazd, kt\u00f3ry zako\u0144czy si\u0119 dok\u0142adnie w tym miejscu, w kt\u00f3rym zacz\u0105\u0142.',
+      'Zr\u00f3b ca\u0142\u0105 seri\u0119 manewr\u00f3w bez \u017cadnego dotkni\u0119cia pacho\u0142k\u00f3w.',
+      'Wykonaj perfekcyjny przejazd w rytmie muzyki z g\u0142o\u015bnik\u00f3w.',
+      'Zr\u00f3b zadanie legendy: trzy r\u00f3\u017cne manewry w jednym ci\u0105gu.',
+      'Zr\u00f3b najpi\u0119kniejszy donut i ustaw go jako zdj\u0119cie profilowe.',
+      'Wykonaj przejazd, kt\u00f3ry kto\u015b nagra z drona lub z g\u00f3ry.',
+      'Zr\u00f3b przejazd z d\u017awi\u0119kiem i dymem w jednym uj\u0119ciu.',
+      'Zr\u00f3b ca\u0142\u0105 tras\u0119 w po\u015blizgu, je\u015bli warunki na to pozwalaj\u0105 i jest bezpiecznie.',
+      'Zr\u00f3b manewr, kt\u00f3rego nigdy wcze\u015bniej nie robi\u0142e\u015b, ale na spokojnie.',
+      'Zr\u00f3b wsp\u00f3lne uj\u0119cie kilku aut w jednej choreografii.',
+      'Zr\u00f3b przejazd po\u017cegnalny: spokojny, r\u00f3wny i pi\u0119kny.',
+      'Zr\u00f3b sygnaturowy manewr i nadaj mu w\u0142asn\u0105 nazw\u0119.',
+      'Zr\u00f3b fina\u0142ow\u0105 seri\u0119 i zako\u0144cz j\u0105 czystym, dok\u0142adnym zatrzymaniem.',
+      'Wykonaj taki przejazd, \u017ce kolega powie: \u201ejeszcze raz\u201d.',
+      'Nagraj najlepszy przejazd dnia i wybierz do niego tytu\u0142.',
+      'Zr\u00f3b wej\u015bcie w zakr\u0119t po idealnej linii i opisz je w jednym zdaniu.',
+      'Zr\u00f3b manewr, kt\u00f3ry robi wra\u017cenie bez ryzykownej pr\u0119dko\u015bci.',
+      'Zr\u00f3b trzy pr\u00f3by tego samego triku i wybierz najlepsz\u0105.',
+      'Zr\u00f3b manewr w stylu rajdowym na spokojnym odcinku.',
+      'Zr\u00f3b manewr w stylu driftowym na spokojnym odcinku.',
+      'Zr\u00f3b manewr w stylu wy\u015bcigowym: r\u00f3wno i bez ozdobnik\u00f3w.',
+      'Poka\u017c koledze sw\u00f3j najlepszy manewr i zapytaj o ocen\u0119.',
+      'Zr\u00f3b dzie\u0144 legendy: wykonaj po jednym zadaniu z ka\u017cdej kategorii.',
+      'Zr\u00f3b przejazd, o kt\u00f3rym b\u0119dziesz opowiada\u0107 za rok.',
+      'Zako\u0144cz sesj\u0119 w\u0142asnym, kr\u00f3tkim i czystym manewrem.'
+    ]
+  };
+  Object.keys(H).forEach(cat=>{
+    const bank = TASK_BANK[cat]; if(!bank) return;
+    const have = new Set(bank.map(x=>x.t));
+    H[cat].forEach((t,i)=>{ if(!have.has(t)) bank.push({t, d:[1,2,3][i%3], s:20+(i%3)*10, ai:null}); });
+  });
+  LS.s('bl_seen', []);   // reset historii, zeby nowe zadania weszly od razu
+})();
+
+/* ---------- (8) OFFLINE ---------- */
+(function(){
+  try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){}
+  const oTr = V.tracks, oR = render;
+  V.tracks = function(){
+    let h = oTr();
+    if(typeof navigator.onLine === 'boolean' && !navigator.onLine){
+      h = '<div class=fr style="--c:#FFD400"><b style="color:#FFD400">\ud83d\udce1 TRYB OFFLINE</b><small>Brak internetu: tory i zakr\u0119t\u00f3w u\u017cywasz z pami\u0119ci telefonu. Mapa jest rysowana lokalnie.</small></div>' + h;
+      h = h.replace(/<div class="vid-box"><iframe[^>]*><\/iframe><\/div>/, '<div class="vid-box"><canvas id="off-cv" style="width:100%;height:260px"></canvas></div>');
+    }
+    return h;
+  };
+  function drawOffline(){
+    const cv = document.getElementById('off-cv'); if(!cv || !S.activeTrack) return;
+    const g = S.activeTrack.geometry || [S.activeTrack.start, S.activeTrack.end];
+    const W = 700, H = 360; cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'); c.fillStyle = '#0a0a0d'; c.fillRect(0,0,W,H);
+    const lat0 = g[0].lat, lon0 = g[0].lon, kx = Math.cos(lat0*Math.PI/180);
+    const X = p=>(p.lon-lon0)*111320*kx, Y = p=>-(p.lat-lat0)*111320;
+    let a=1e12,b=-1e12,e=1e12,f=-1e12;
+    g.forEach(p=>{a=Math.min(a,X(p));b=Math.max(b,X(p));e=Math.min(e,Y(p));f=Math.max(f,Y(p));});
+    const sc = Math.min((W-60)/Math.max(1,b-a),(H-60)/Math.max(1,f-e));
+    const ox = (W-(b-a)*sc)/2, oy = (H-(f-e)*sc)/2;
+    const PX = p=>ox+(X(p)-a)*sc, PY = p=>oy+(Y(p)-e)*sc;
+    c.strokeStyle = '#00F0FF'; c.lineWidth = 5; c.lineJoin = 'round'; c.beginPath();
+    g.forEach((p,i)=>{ i?c.lineTo(PX(p),PY(p)):c.moveTo(PX(p),PY(p)); }); c.stroke();
+    c.fillStyle = '#39FF14'; c.beginPath(); c.arc(PX(g[0]),PY(g[0]),9,0,7); c.fill();
+    c.fillStyle = '#FF1744'; c.beginPath(); c.arc(PX(g[g.length-1]),PY(g[g.length-1]),9,0,7); c.fill();
+    c.fillStyle = '#fff'; c.font = 'bold 16px Arial'; c.fillText('START', PX(g[0])+12, PY(g[0])-8); c.fillText('META', PX(g[g.length-1])+12, PY(g[g.length-1])+20);
+  }
+  render = function(){ oR(); try{ drawOffline(); }catch(e){} };
+  window.addEventListener && window.addEventListener('online', ()=>{ if(S.scr==='tracks') render(); });
+  window.addEventListener && window.addEventListener('offline', ()=>{ if(S.scr==='tracks') render(); });
+})();
+
+/* ---------- (9) ADMIN: HASH + UKRYTY PRZYCISK ---------- */
+const ADMIN_HASH = '53204e73499447a34c997b53a46de151cf50f0372ddbed06cdd53c8ab960c19b';
+async function sha256hex(s){
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+A.loginAdmin = async function(){
+  const u = ($('#adm-u')||{}).value || '', p = ($('#adm-p')||{}).value || '';
+  try{
+    if(!(window.crypto && crypto.subtle)){ alert('Logowanie admina wymaga po\u0142\u0105czenia HTTPS.'); return; }
+    const h = await sha256hex(u.trim().toUpperCase() + ':' + p);
+    if(h === ADMIN_HASH){ S.isAdmin = true; render(); } else alert('B\u0142\u0119dne has\u0142o');
+  }catch(e){ alert('B\u0142\u0105d logowania'); }
+};
+(function(){
+  const oh = V.home, oR = render;
+  // ukrycie przycisku ADMIN na ekranie glownym (dostep: 5 szybkich klikniec w logo BLACKLIST)
+  V.home = ()=> oh().replace(/<button style="color:#FF1744" onclick="A\.go\('admin'\)">[^<]*<\/button>/, '');
+  let taps = 0, last = 0;
+  document.addEventListener && document.addEventListener('click', e=>{
+    const t = e.target && e.target.closest && e.target.closest('.wm');
+    if(!t) return;
+    const now = Date.now(); taps = (now-last < 1500) ? taps+1 : 1; last = now;
+    if(taps >= 5){ taps = 0; A.go('admin'); }
+  });
 })();
 render();
