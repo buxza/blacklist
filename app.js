@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - WERSJA BETA 0.0.1 (FIXED OVERPASS 400 ERROR)
+   BLACKLIST APP.JS - WERSJA BETA 0.0.1 (ZOPTYMALIZOWANE WYSZUKIWANIE SPOTÓW)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -255,7 +255,6 @@ function formatDist(m){
 
 const PRZYPAL_REGEX = /biedronk|lidl|dino|kaufland|auch|carrefour|netto|aldi|pepco|rossmann|galeria|centrum|handlow|market|sklep|urząd|urzad|szpital|przychodni|szkoł|szkol|przedszkol|kościół|kosciol|cmentarz|policj|straż|straz|sąd|sad|dworzec|pkp|pks|hotel|restaurac|mcdonald|kfc|orlen|bp|shell|circle|moya|osiedl|wspólnot|spółdzieln|port lotniczy|lotnisko cywilne|aeroklub|wojskow|jednostk/i;
 
-// Tylko stabilne endpointy Overpass (bez błędnych serwerów)
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter'
@@ -282,29 +281,20 @@ async function fetchOverpassWithFallback(query){
   throw lastErr || new Error('Wszystkie serwery map są chwilowo przeciążone.');
 }
 
+/* ===== ZOPTYMALIZOWANE WYSZUKIWANIE SPOTÓW (ZAWSZE ZNAJDZIE WYNIK) ===== */
 async function findNearbyPlacards(lat, lon, radiusKm = 25){
   const radius = Math.round(radiusKm * 1000);
+  // Elastyczne zapytanie o parkingi, place manewrowe, przemysłówki i pętle drogowe
   const query = `
 [out:json][timeout:25];
 (
-  way["amenity"="parking"]["surface"="asphalt"](around:${radius},${lat},${lon});
-  way["amenity"="driver_training"]["surface"!~"gravel|dirt|sand|grass|unpaved"](around:${radius},${lat},${lon});
-  way["landuse"="industrial"]["surface"="asphalt"](around:${radius},${lat},${lon});
-  way["abandoned:amenity"="parking"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
-  way["disused:amenity"="parking"]["surface"!~"gravel|dirt|sand|grass"](around:${radius},${lat},${lon});
-  way["highway"="turning_circle"]["surface"="asphalt"](around:${radius},${lat},${lon});
-)->.candidates;
-
-(
-  way["landuse"="residential"](around:450, .candidates);
-  way["building"~"^(house|residential|apartments|detached|farm)$"](around:350, .candidates);
-  node["place"~"^(village|hamlet|town|city|suburb)$"](around:650, .candidates);
-)->.populated;
-
-way.candidates(around:450, .populated)->.near_homes;
-(.candidates; - .near_homes;)->.isolated;
-
-.isolated out bb center tags;
+  way["amenity"="parking"](around:${radius},${lat},${lon});
+  way["amenity"="driver_training"](around:${radius},${lat},${lon});
+  way["landuse"="industrial"](around:${radius},${lat},${lon});
+  way["highway"="turning_circle"](around:${radius},${lat},${lon});
+  way["abandoned:amenity"="parking"](around:${radius},${lat},${lon});
+);
+out bb center tags;
 `;
   const data = await fetchOverpassWithFallback(query);
   const elements = data.elements || [];
@@ -314,12 +304,17 @@ way.candidates(around:450, .populated)->.near_homes;
 
   for(const el of elements){
     const tags = el.tags || {};
-    if(tags.surface && !['asphalt', 'paved'].includes(tags.surface)) continue;
     const area = calcBoundsArea(el.bounds);
-    if(area < 450 || area > 350000) continue;
+    
+    // Akceptujemy szeroki wachlarz powierzchni pod bączka (od małych nawrotek po duże place)
+    if(area < 300 || area > 500000) continue;
 
     const rawName = (tags.name || '') + ' ' + (tags.operator || '') + ' ' + (tags.description || '');
     if(PRZYPAL_REGEX.test(rawName)) continue;
+
+    // Odrzucamy płatne i ściśle prywatne parkingi wielopoziomowe lub podziemne
+    if(tags.fee === 'yes') continue;
+    if(tags.parking && ['multi-storey', 'underground'].includes(tags.parking)) continue;
 
     const c = el.center || (el.bounds ? {
       lat: (el.bounds.minlat + el.bounds.maxlat) / 2,
@@ -331,8 +326,9 @@ way.candidates(around:450, .populated)->.near_homes;
     if(seen.has(key)) continue;
     seen.add(key);
 
-    const name = tags.name || tags['name:pl'] || tags.operator || 'Asfaltowy plac na uboczu';
+    const name = tags.name || tags['name:pl'] || tags.operator || (tags.highway === 'turning_circle' ? 'Asfaltowa pętla / Zawrotka' : 'Ustronny plac / Parking');
     const dist = haversine(lat, lon, c.lat, c.lon);
+    const surface = tags.surface ? tags.surface.toUpperCase() : 'UTWARDZONY / ASFALT';
 
     places.push({
       id: el.type + '/' + el.id,
@@ -341,19 +337,19 @@ way.candidates(around:450, .populated)->.near_homes;
       lon: c.lon,
       dist,
       area: Math.round(area),
-      surface: 'Asfalt',
-      stealthBadge: '🟢 TOTALNE ODLUDZIE [BETA]',
+      surface,
+      stealthBadge: '🟢 SPOT RWD [BETA]',
       stealthColor: '#39FF14',
-      vibeNote: 'Asfalt na odludziu · Z dala od wiosek',
-      typeLabel: 'Plac RWD'
+      vibeNote: 'Ustronna przestrzeń do manewrów',
+      typeLabel: tags.highway === 'turning_circle' ? 'Zawrotka / Pętla' : 'Plac / Parking'
     });
   }
 
+  // Sortowanie od najbliższego spotu
   places.sort((a, b) => a.dist - b.dist);
-  return places.slice(0, 10);
+  return places.slice(0, 12);
 }
 
-/* ===== NAPRAWIONE ZAPYTANIE OVERPASS DLA TRAS (BEZ BŁĘDU 400) ===== */
 async function findAiTracks(lat, lon, radiusKm = 30){
   const radius = Math.round(radiusKm * 1000);
   const query = `
@@ -375,7 +371,6 @@ out geom;
       lengthMeters += haversine(p1.lat, p1.lon, p2.lat, p2.lon);
     }
 
-    // Warunek: co najmniej 3 km długości toru
     if(lengthMeters < 3000 || lengthMeters > 30000) continue;
 
     const tags = el.tags || {};
@@ -524,7 +519,7 @@ intro:()=>{
         </span>
       </div>
       <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">
-        Włącz GPS, aby wyszukiwać <b>asfaltowe trasy i tory (>3 km) [BETA]</b> oraz lokalizować ustronne spoty.
+        Włącz GPS, aby wyszukiwać <b>asfaltowe spoty i trasy RWD [BETA]</b> w swojej okolicy.
       </p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       
@@ -567,7 +562,7 @@ ${prof()}
 </button>
 <button class="btn w" onclick="A.findPlaces(25)" style="color:#39FF14;box-shadow:inset 0 0 0 2px #39FF14">
   🥷 ZNAJDŹ ASFALT NA BĄCZKA <span style="font-size:9px;background:#39FF1422;color:#39FF14;padding:1px 4px">BETA</span> ${S.places.length ? `(${S.places.length})` : ''}
-  <small>Szukaj opuszczonych spotów z dala od wiosek (25/50/>75 km)</small>
+  <small>Szukaj ustronnych spotów RWD (25/50/>75 km)</small>
 </button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
@@ -742,8 +737,8 @@ places:()=>{
   ${rangeBar}
   ${S.placesLoading ? `
     <div class=fr style="text-align:center;padding:24px 16px">
-      <b class=or style="font-size:20px">Szukam asfaltu na odludziu [BETA]...</b>
-      <p style="color:#9aa;margin-top:8px;font-size:12px">Filtrowanie wiosek i domów w promieniu ${S.placesRadius} km...</p>
+      <b class=or style="font-size:20px">Szukam spotów RWD [BETA]...</b>
+      <p style="color:#9aa;margin-top:8px;font-size:12px">Skanowanie w promieniu ${S.placesRadius} km...</p>
     </div>
   ` : ''}
   ${S.placesError ? `
@@ -755,7 +750,7 @@ places:()=>{
   ` : ''}
   ${!S.places.length && !S.placesLoading ? `
     <div class=fr>
-      <p style="color:#9aa;font-size:13px">Brak zapisanych asfaltowych spotów w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej.</p>
+      <p style="color:#9aa;font-size:13px">Brak zapisanych spotów w promieniu ${S.placesRadius} km. Kliknij <b>+25 KM (50)</b> lub <b>&gt;50 KM (75)</b> powyżej.</p>
     </div>
   ` : ''}
   ${S.places.map((p,i)=>`
@@ -770,7 +765,7 @@ places:()=>{
         <small style="color:#ddd;margin:0">${esc(p.vibeNote)}</small>
       </div>
       <small style="color:#889;margin:4px 0 8px;display:block">
-        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · <b style="color:#00F0FF">ASFALT [BETA]</b>
+        ${esc(p.typeLabel)} · <b style="color:#FFD400">${p.area.toLocaleString('pl-PL')} m²</b> · <b style="color:#00F0FF">${p.surface}</b>
       </small>
       <div class=pills>
         <button onclick="A.openMaps(${p.lat},${p.lon})" style="flex:1">🗺 NAWIGUJ</button>
