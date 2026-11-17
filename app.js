@@ -1331,3 +1331,18 @@ render();
     '<button class="btn cy" onclick="A.go(\'tor\')" style="color:#FFD400;box-shadow:inset 0 0 0 2px #FFD400">\ud83c\udfc1 TOR '+esc(S.trk.name)+': MAPA + PROWADZENIE<small>Dojazd do toru i g\u0142osowe wskaz\u00f3wki na zak\u0119tach</small></button><div class=foot-links>');
 })();
 render();
+
+/* DODATEK 4: przycisk TOR korzysta wylacznie z torow wygenerowanych przez AI */
+(function(){
+  const og=A.go;
+  A.go=function(s){
+    if(s==='tor'){
+      if(S.tracks && S.tracks.length){ return og.call(A,'tracks'); }
+      return A.findTracks(30);
+    }
+    return og.call(A,s);
+  };
+  const oh=V.home;
+  V.home=()=>oh().split('MAPA + PROWADZENIE').join('MAPA + PROWADZENIE (TORY AI)').replace(/TOR [^:<]*: MAPA/,'TOR AI: MAPA');
+})();
+render();
