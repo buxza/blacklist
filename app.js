@@ -2034,3 +2034,56 @@ A.loginAdmin = async function(){
   });
 })();
 render();
+
+
+/* ============================================================================
+   DODATEK 9: WYBOR KATEGORII ZADAN + WAGI (domyslnie duzo UPALANIA, malo SOUND CHECK)
+   ============================================================================ */
+const CATW = {
+  w: LS.g('bl_cat_w', null) || {burn:4, drift:2, speed:2, precision:2, reverse:2, sound:1, duel:2, legend:2},
+  levels: [[0,'WY\u0141.'],[1,'MA\u0141O'],[2,'NORMALNIE'],[4,'DU\u017bO']],
+  set(c, v){ CATW.w[c] = +v; LS.s('bl_cat_w', CATW.w); CATW.sync(); render(); },
+  sync(){
+    const on = Object.keys(CATS).filter(c=>(CATW.w[c]||0) > 0);
+    S.cats = on.length ? on : ['burn'];
+  },
+  all(v){ Object.keys(CATS).forEach(c=>CATW.w[c]=v); LS.s('bl_cat_w', CATW.w); CATW.sync(); render(); },
+  reset(){ CATW.w = {burn:4, drift:2, speed:2, precision:2, reverse:2, sound:1, duel:2, legend:2}; LS.s('bl_cat_w', CATW.w); CATW.sync(); render(); }
+};
+CATW.sync();
+
+(function(){
+  const origPick = pick;
+  pick = function(cats, maxD, aiOnly=false){
+    let pool = cats.filter(c=>(CATW.w[c]==null?2:CATW.w[c]) > 0);
+    if(aiOnly) pool = pool.filter(c=>(TASK_BANK[c]||[]).some(x=>x.ai));
+    if(!pool.length) pool = cats.slice();
+    const total = pool.reduce((s,c)=>s+(CATW.w[c]==null?2:CATW.w[c]), 0) || pool.length;
+    let r = Math.random()*total, chosen = pool[pool.length-1];
+    for(const c of pool){ r -= (CATW.w[c]==null?2:CATW.w[c]) || 1; if(r <= 0){ chosen = c; break; } }
+    return origPick([chosen], maxD, aiOnly);
+  };
+
+  const oSetup = V.setup;
+  V.setup = function(){
+    const h = oSetup();
+    const rows = Object.keys(CATS).map(c=>{
+      const v = CATS[c], cur = CATW.w[c];
+      return `<div style="margin:10px 0"><div class=rl style="color:${v[1]}"><span>${v[2]} ${v[0]}</span></div>
+        <div class=pills style="gap:4px;margin-top:4px">${CATW.levels.map(l=>`<button class="${cur===l[0]?'on':''}" onclick="CATW.set('${c}',${l[0]})" style="font-size:11px;padding:8px 2px;--c:${v[1]}">${l[1]}</button>`).join('')}</div></div>`;
+    }).join('');
+    const box = `
+<div class="fr" style="--c:#00F0FF">
+  <h3 style="margin-top:0">KATEGORIE ZADA\u0143</h3>
+  <small>Wybierz, co ma wypada\u0107. \u201eDU\u017bO\u201d losuje si\u0119 4 razy cz\u0119\u015bciej ni\u017c \u201eMA\u0141O\u201d razy 4, \u201eWY\u0141.\u201d ca\u0142kiem pomija kategori\u0119.</small>
+  ${rows}
+  <div class=pills style="margin-top:8px">
+    <button onclick="CATW.all(2)" style="font-size:11px">WSZYSTKIE</button>
+    <button onclick="CATW.reset()" style="font-size:11px">DOMY\u015aLNE</button>
+  </div>
+  <small>Aktywne: <b>${S.cats.map(c=>CATS[c][0]).join(', ')}</b></small>
+</div>`;
+    return h.replace(/<button class="btn on" onclick="A\.start\(\)">/, box + '<button class="btn on" onclick="A.start()">');
+  };
+})();
+render();
