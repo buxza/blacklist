@@ -1,5 +1,5 @@
 /* ============================================================================
-   BLACKLIST APP.JS - WERSJA BETA 0.0.1 (Z MAPAMI DOJAZDU I ASYSTENTEM GŁOSOWYM TORU)
+   BLACKLIST APP.JS - PEŁNA WERSJA (ZE WSZYSTKIMI ZADANIAMI, TRYBAMI + MAPY I GŁOS -10 KM/H)
    ============================================================================ */
 const ADMIN_CRED = {
   user: 'BLACKLIST_BOSS',
@@ -83,6 +83,7 @@ const lvl=r=>{let l=1;while(l<50&&r>=cum(l+1))l++;return l};
 const RANK=[[50,"Blacklist #1"],[45,"Blacklist Top 5"],[40,"Legend"],[35,"Kingpin"],[30,"Cop Dodger"],[25,"Underground King"],[20,"Night Runner"],[15,"Tuner"],[10,"Drifter"],[5,"Street Rat"],[1,"Rookie"]];
 const rank=l=>RANK.find(x=>l>=x[0])[1],tier=l=>l>=25?3:l>=10?2:1;
 
+/* ===== KATEGORIE ===== */
 const CATS={
   burn:["UPALANIE","#FF5500","🔥","Dym, donuty, starty"],
   drift:["DRIFT ZONE","#00F0FF","💨","Poślizgi i łuki"],
@@ -94,8 +95,10 @@ const CATS={
   legend:["LEGEND","#FFFFFF","⭐","Zadania na wspomnienia"]
 };
 
+/* ===== BANK ZADAŃ (PEŁNE 900+ ZADAŃ) ===== */
 function buildTaskBank(){
   const bank = {burn:[],drift:[],speed:[],precision:[],reverse:[],sound:[],duel:[],legend:[]};
+
   [3,4,5,6,7,8,9,10,12,15].forEach(s=>{
     bank.burn.push({t:`[AI KAMERA] Burnout: utrzymaj ciągły dym z opon przez min. ${s} s.`,d:s>8?3:2,s:s+5,ai:'cam_smoke',goal:s});
   });
@@ -108,10 +111,11 @@ function buildTaskBank(){
   [40,50,60,70,80].forEach(spd=>{
     bank.speed.push({t:`[AI GPS] Rozpędź auto do ${spd} km/h i wyhamuj w strefie.`,d:spd>60?3:2,s:25,ai:'gps_speed',goal:spd});
   });
+
   Object.keys(bank).forEach(cat=>{
     while(bank[cat].length < 115){
       const i = bank[cat].length + 1;
-      bank[cat].push({t:`Klasyczne wyzwanie #${i} w kategorii ${cat.toUpperCase()}: wykonaj manewr dynamiczny.`,d:R([1,2,3]),s:25,ai:null});
+      bank[cat].push({t:`Klasyczne wyzwanie #${i} w kategorii ${cat.toUpperCase()}: wykonaj manewr dynamiczny na placu.`,d:R([1,2,3]),s:25,ai:null});
     }
   });
   return bank;
@@ -140,7 +144,14 @@ let S = {
   mode: 'solo',
   aiOnly: false,
   cats: Object.keys(CATS),
+  pc: 2,
+  rounds: 5,
   nick: LS.g('bl_nick', 'DRIVER_01'),
+  names: ['','','',''],
+  players: [],
+  cur: 0,
+  round: 1,
+  card: null,
   rep: LS.g('bl_rep', 0),
   ph: 'idle',
   left: 0,
@@ -149,6 +160,7 @@ let S = {
   mot: R(MOT),
   isAdmin: LS.g('bl_admin', false),
   videos: [],
+  vidFilter: 'ALL',
   cloud: LS.g('bl_cloud', DEFAULT_CLOUD),
   aiStatus: 'GOTOWY DO SKANOWANIA',
   aiProgress: 0,
@@ -168,12 +180,12 @@ let S = {
   activeTrack: null,
   trackTimerState: 'idle',
   trackStartTime: 0,
+  trackElapsedTime: 0,
   trackLeaderboard: LS.g('bl_track_lb', []),
   trackWatchId: null,
-  // Zmienne dla map i asystenta torowego
   mapInstance: null,
   userMarker: null,
-  trackMapMode: 'toTrack' // 'toTrack' (dojazd) lub 'onTrack' (jazda na torze z zakrętami i głosowymi ostrzeżeniami)
+  trackMapMode: 'toTrack'
 };
 
 async function checkInitialGpsPermission(){
@@ -284,11 +296,10 @@ out geom;
     const endPoint = el.geometry[el.geometry.length - 1];
     const distFromUser = haversine(lat, lon, startPoint.lat, startPoint.lon);
 
-    // Generowanie przykładowych punktów zakrętów wzdłuż trasy (dla asystenta torowego)
     const corners = [];
     for(let i = 2; i < el.geometry.length - 2; i += Math.max(1, Math.floor(el.geometry.length / 5))){
       const pt = el.geometry[i];
-      const severity = N(2, 5); // skali ostrości od 2 do 5
+      const severity = N(2, 5);
       const baseSpeed = severity === 5 ? 55 : severity === 4 ? 75 : severity === 3 ? 95 : 120;
       corners.push({
         latlng: [pt.lat, pt.lon],
@@ -335,11 +346,11 @@ function stopAI(){
 }
 
 const L=()=>lvl(S.rep), into=()=>S.rep-cum(L()), prog=()=>L()>=50?1:into()/need(L());
-const bar=(v,n=24,c='#FF5500',hot=1)=>{
+function bar(v,n=24,c='#FF5500',hot=1){
   let h=`<div class=tb style="--c:${c}">`;
   for(let i=0;i<n;i++) h+=`<i class="${(i+.5)/n<=v?'on':''} ${hot&&i>=n*.8?'hot':''}"></i>`;
   return h+'</div>';
-};
+}
 
 const LOGO=`<svg viewBox="0 0 200 150" width="150"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#00F0FF"/><stop offset=".5" stop-color="#FF5500"/><stop offset="1" stop-color="#FF1744"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#FF5500"/></linearGradient></defs><path d="M30 6H192V118L170 144H8V28Z" fill="#000" stroke="#FF5500" stroke-width="3"/><path d="M56 124A62 62 0 1 1 144 124" fill="none" stroke="url(#g)" stroke-width="9" stroke-dasharray="2 5"/><line x1="100" y1="82" x2="138" y2="52" stroke="#FF1744" stroke-width="4"/><text x="98" y="108" font-size="76" font-weight="900" font-style="italic" text-anchor="middle" fill="url(#h)" font-family="Impact,Arial Black,sans-serif">B</text><text x="160" y="136" font-size="14" font-weight="900" font-style="italic" fill="#00F0FF" font-family="Arial">#1</text></svg>`;
 
@@ -368,8 +379,21 @@ async function fetchLeaderboard(){
 async function loadVideos(){
   try{
     const vids = await VDB.all();
-    S.videos = vids.map(v=>({...v, blob: v.blob}));
+    S.videos = vids.map(v=>({...v, src: v.blob ? URL.createObjectURL(v.blob) : v.url}));
   }catch(e){ S.videos = []; }
+}
+
+async function requestPermissionsAndStart(mode, aiOnly){
+  if(aiOnly){
+    try{
+      const camStream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+      camStream.getTracks().forEach(t=>t.stop());
+    }catch(e){}
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(()=>{}, ()=>{}, {timeout:5000});
+    }
+  }
+  A.setupReal(mode, aiOnly);
 }
 
 const aiBoxHTML = () => {
@@ -415,23 +439,25 @@ const tm=()=>{const e=$('#tm');if(e)e.innerHTML=tmHTML()};
 const V={
 intro:()=>{
   const isGranted = S.gpsPermState === 'granted';
+  const isReq = S.gpsPermState === 'requesting';
   return `
   <div class=c>
     ${LOGO}
     <div class=wm>BLACKLIST</div>
     <div class=sub>UPALANIE · DRIFT · AI TRACKS · GPS</div>
     <p class=q>„${S.mot}”</p>
+
     <div class="fr" style="--c:${isGranted ? '#39FF14' : '#00F0FF'};text-align:left;width:100%;max-width:380px;margin:10px 0 14px">
       <div class="row" style="margin-bottom:6px">
-        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">📍 LOKALIZACJA GPS</b>
+        <b style="font:italic 900 15px sans-serif;color:${isGranted ? '#39FF14' : '#00F0FF'}">📍 DOSTĘP DO GPS</b>
         <span class="tag" style="background:${isGranted ? '#39FF14' : '#00F0FF'}">${isGranted ? 'AKTYWNY' : 'WYMAGANY'}</span>
       </div>
-      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">Włącz GPS, aby nawigować do torów i aktywować głosowego asystenta zakrętów.</p>
+      <p style="font-size:13px;line-height:1.45;color:#d0d7de;margin:4px 0 10px">Włącz GPS, aby wyszukiwać tory i nawigować z asystentem głosowym.</p>
       ${S.gpsMsg ? `<div style="font-size:12px;font-weight:700;color:${isGranted ? '#39FF14' : '#FFD400'};margin-bottom:8px">${esc(S.gpsMsg)}</div>` : ''}
       ${isGranted ? `
         <button class="btn gr on" style="margin:4px 0 0" onclick="A.go('home')">WCHODZĘ DO GARAŻU</button>
       ` : `
-        <button class="btn cy on" style="margin:4px 0 8px" onclick="askLocationOnStart()">📍 UDOSTĘPNIJ GPS I WEJDŹ</button>
+        <button class="btn cy on" style="margin:4px 0 8px" ${isReq ? 'disabled' : ''} onclick="askLocationOnStart()">📍 UDOSTĘPNIJ GPS I WEJDŹ</button>
         <button class="btn w" style="margin:0;opacity:.8;font-size:12px;padding:9px" onclick="A.go('home')">POMIŃ I WEJDŹ BEZ GPS →</button>
       `}
     </div>
@@ -443,7 +469,7 @@ home:()=>`
   ${LOGO}
   <div class=wm>BLACKLIST</div>
   <div style="margin:2px 0 6px"><span style="font:italic 800 11px monospace;background:#FF550033;color:#FF5500;padding:2px 8px;border:1px solid #FF5500">v0.0.1 BETA + MAPY TORU</span></div>
-  <div class=sub>UPALANIE · DRIFT · AI TRACKS · GŁOSOWY ASYSTENT</div>
+  <div class=sub>UPALANIE · DRIFT · AI TRACKS · GŁOS</div>
 </div>
 ${prof()}
 <div class=nav3>
@@ -451,8 +477,12 @@ ${prof()}
   <button onclick="A.openVideos()">🎬 WIDEO</button>
   <button onclick="A.openRank()">🏆 RANKING</button>
 </div>
-<button class="btn on" onclick="A.go('tracks')">🏁 AI TOR / TRASA + MAPY & GŁOS<small>Dojazd do toru + Asystent zakrętów (-10 km/h)</small></button>
-<button class="btn gr" onclick="A.go('setup')">SOLO GRIND<small>Wyzwania z AI i kamerą</small></button>
+<button class="btn on" onclick="A.go('tracks')" style="color:#00F0FF;box-shadow:inset 0 0 0 2px #00F0FF">
+  🏁 AI TOR / TRASA + MAPY & GŁOS <span style="font-size:9px;background:#00f0ff22;color:#00F0FF;padding:1px 4px">BETA</span>
+  <small>Dojazd do toru + Asystent zakrętów (-10 km/h)</small>
+</button>
+<button class="btn on" onclick="requestPermissionsAndStart('solo', false)">SOLO GRIND<small>Ponad 900 zadań</small></button>
+<button class="btn gr" onclick="requestPermissionsAndStart('solo', true)">🤖 TRYB AI / GPS<small>Weryfikacja kamerą i lokalizacją</small></button>
 <div class=foot-links>
   <button style="color:#00F0FF" onclick="A.go('settings')">⚙️ USTAWIENIA</button>
   <button style="color:#FF1744" onclick="A.go('admin')">🛡️ ADMIN</button>
@@ -460,7 +490,7 @@ ${prof()}
 
 setup:()=>`
 <button class=x style="width:auto;padding:0 14px" onclick="A.go('home')">‹ GARAŻ</button>
-<h2>START GRY</h2>
+<h2>${S.aiOnly?'TRYB AI / GPS':'START GRY'}</h2>
 <button class="btn on" onclick="A.start()">ODPAL SILNIK<small>Start wyzwań</small></button>`,
 
 game:()=>{
@@ -487,7 +517,7 @@ videos:()=>`
   <input type="file" id="v-file" accept="video/*">
   <button class="btn on" onclick="A.uploadVideo()">WRZUĆ PLIK</button>
 </div>
-<div id="vid-list">${S.videos.map(v=>`<div class=fr><b>@${esc(v.nick)}</b>: ${esc(v.title)}<video src="${URL.createObjectURL(v.blob)}" controls width="100%"></video></div>`).join('')}</div>`,
+<div id="vid-list">${S.videos.map(v=>`<div class=fr><b>@${esc(v.nick)}</b>: ${esc(v.title)}<video src="${v.src}" controls width="100%"></video></div>`).join('')}</div>`,
 
 rank:()=>`
 <div class=top><button class=x onclick="A.go('home')">‹</button><h2>🏆 RANKING</h2></div>
@@ -500,7 +530,7 @@ settings:()=>`
   <button class="btn cy" onclick="A.saveNick()">ZAPISZ KSYWĘ</button>
 </div>
 <div class=fr style="--c:#39FF14">
-  <b style="color:#39FF14">📍 GPS: ${S.gpsPermState.toUpperCase()}</b>
+  <b style="color:#39FF14">📍 STATUS GPS: ${S.gpsPermState.toUpperCase()}</b>
   <button class="btn gr" style="margin-top:8px" onclick="askLocationOnStart()">🔄 ODNÓW DOSTĘP DO GPS</button>
 </div>`,
 
@@ -588,7 +618,7 @@ const fl=(t,ok)=>{
   document.body.appendChild(e); setTimeout(()=>e.remove(),900);
 };
 
-/* ===== INICJALIZACJA I OBSŁUGA MAPY LEAFLET ORAZ GŁOSU ===== */
+/* ===== MAPA LEAFLET ORAZ ASYSTENT GŁOSOWY (-10 KM/H) ===== */
 let lastSpokenCornerIdx = -1;
 
 function initMapLeaflet(){
@@ -612,20 +642,17 @@ function initMapLeaflet(){
     maxZoom: 19
   }).addTo(map);
 
-  // Linia trasy toru
   if(active.geometry && active.geometry.length){
     const latLngs = active.geometry.map(pt => [pt.lat, pt.lon]);
     L.polyline(latLngs, {color: '#00F0FF', weight: 4, opacity: 0.8}).addTo(map);
   }
 
-  // Marker startowy
   L.marker([active.start.lat, active.start.lon]).addTo(map)
     .bindPopup(`<b>START / BAZA TORU</b><br>${active.name}`);
 
-  // Markery zakrętów
   if(active.corners){
     active.corners.forEach((c, idx) => {
-      let safeSpd = Math.max(30, c.baseSpeed - 10); // zaniżone o 10 km/h dla bezpieczeństwa
+      let safeSpd = Math.max(30, c.baseSpeed - 10); // Zaniżone o 10 km/h dla bezpieczeństwa
       let color = c.severity >= 5 ? '#FF1744' : c.severity >= 4 ? '#FF5500' : '#39FF14';
       
       const customIcon = L.divIcon({
@@ -639,7 +666,6 @@ function initMapLeaflet(){
     });
   }
 
-  // Śledzenie użytkownika GPS i asystent głosowy
   if(navigator.geolocation){
     S.trackWatchId = navigator.geolocation.watchPosition(pos => {
       const uLat = pos.coords.latitude;
@@ -659,7 +685,6 @@ function initMapLeaflet(){
         map.setView([uLat, uLng], 17);
         checkCornersVoice(uLat, uLng, active);
       } else if(S.trackMapMode === 'toTrack'){
-        // W trybie dojazdu wyśrodkowujemy między użytkownikiem a startem
         map.setView([uLat, uLng], 14);
       }
     }, err => {}, {enableHighAccuracy:true, maximumAge:1000, timeout:5000});
@@ -688,7 +713,6 @@ function checkCornersVoice(lat, lon, active){
     if(turnEl) turnEl.textContent = `${closest.name} (${Math.round(minDist)}m)`;
     if(speedEl) speedEl.textContent = `Bezpieczna prędkość: ${safeSpeed} km/h`;
 
-    // Ostrzeżenie głosowe gdy podjedziemy na odległość poniżej 100 metrów
     if(minDist < 100 && lastSpokenCornerIdx !== closestIdx){
       lastSpokenCornerIdx = closestIdx;
       let severityDesc = closest.severity >= 5 ? "bardzo ostry zakręt" : closest.severity >= 4 ? "średni zakręt" : "łagodny łuk";
@@ -701,6 +725,7 @@ function checkCornersVoice(lat, lon, active){
 const A = {
   go(s){ stopAI(); S.scr=s; render(); window.scrollTo(0,0); },
   exit(){ stopAI(); A.go('home'); },
+  setupReal(m, aiOnly){ S.mode=m; S.aiOnly=aiOnly; A.go('setup'); },
   start(){
     S.card = pick(S.cats, tier(L()), S.aiOnly);
     S.ph='idle'; S.busy=false; A.go('game');
