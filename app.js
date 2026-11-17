@@ -1457,3 +1457,147 @@ render();
   });
   if(!LS.g('bl_seen_v2',false)){ LS.s('bl_seen',[]); LS.s('bl_seen_v2',true); }
 })();
+
+
+/* ============================================================================
+   DODATEK 7: MAPA CIEPLA PO PRZEJEZDZIE (AI TOR / TRASA)
+   zielony = spokojnie, czerwony = ostro; pinezki zakretow + Twoja predkosc
+   ============================================================================ */
+const HEAT = {
+  run: null, watch: null,
+  key(id){ return 'bl_heat_' + id; },
+  load(id){ return LS.g(HEAT.key(id), null); },
+  begin(){
+    HEAT.end();
+    if(!S.activeTrack) return;
+    HEAT.run = {id:S.activeTrack.id, pts:[], last:null};
+    HEAT.watch = navigator.geolocation.watchPosition(p=>{
+      const st = S.trackTimerState;
+      if(st === 'running'){
+        const now = Date.now(), lat = p.coords.latitude, lon = p.coords.longitude;
+        let v = p.coords.speed;
+        const L = HEAT.run.last;
+        if((v == null || isNaN(v)) && L){ v = haversine(L.lat,L.lon,lat,lon) / Math.max(0.3,(now-L.t)/1000); }
+        const pt = {lat, lon, v: Math.round((v||0)*3.6), t: now};
+        HEAT.run.pts.push(pt); HEAT.run.last = pt;
+      } else if(st === 'finished'){ HEAT.finish(); }
+      else if(st === 'idle'){ HEAT.end(); }
+    }, ()=>{}, {enableHighAccuracy:true, maximumAge:0, timeout:8000});
+  },
+  end(){ if(HEAT.watch != null){ try{navigator.geolocation.clearWatch(HEAT.watch);}catch(e){} HEAT.watch = null; } },
+  finish(){
+    const r = HEAT.run; HEAT.end();
+    if(!r || r.pts.length < 5) return;
+    const corners = (AIG.corners||[]).map(c=>{
+      let best = null;
+      r.pts.forEach(p=>{ if(haversine(p.lat,p.lon,c.lat,c.lon) <= 45 && (best==null || p.v > best)) best = p.v; });
+      return {n:c.n, lat:c.lat, lon:c.lon, lvl:c.lvl, safe:c.safe, v:best};
+    });
+    const data = {id:r.id, name:(S.activeTrack&&S.activeTrack.name)||'TOR', pts:r.pts,
+      corners, time:(r.pts[r.pts.length-1].t - r.pts[0].t)/1000, ts:Date.now()};
+    LS.s(HEAT.key(r.id), data);
+    render();
+  },
+  color(ratio){
+    const h = 120 - Math.max(0, Math.min(1, (ratio-0.8)/0.45)) * 120;
+    return 'hsl(' + Math.round(h) + ',95%,52%)';
+  },
+  draw(){
+    const cv = document.getElementById('heat-cv');
+    if(!cv || !S.activeTrack) return;
+    const d = HEAT.load(S.activeTrack.id); if(!d) return;
+    const W = 720, H = 820; cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#050505'; g.fillRect(0,0,W,H);
+    g.fillStyle = '#FF5500'; g.font = 'italic 900 40px Arial'; g.fillText('BLACKLIST', 30, 56);
+    g.fillStyle = '#00F0FF'; g.font = 'bold 24px Arial';
+    g.fillText(String(d.name).slice(0,34).toUpperCase(), 30, 92);
+    const vmax = Math.max.apply(null, d.pts.map(p=>p.v).concat([1]));
+    g.fillStyle = '#fff'; g.font = 'bold 22px Arial';
+    g.fillText('CZAS ' + d.time.toFixed(1) + ' s   |   MAX ' + vmax + ' km/h', 30, 128);
+    // rzut: mapa lokalna w metrach
+    const lat0 = d.pts[0].lat, lon0 = d.pts[0].lon, kx = Math.cos(lat0*Math.PI/180);
+    const X = p=>(p.lon-lon0)*111320*kx, Y = p=>-(p.lat-lat0)*111320;
+    let a=1e12,b=-1e12,c=1e12,e=-1e12;
+    d.pts.forEach(p=>{a=Math.min(a,X(p));b=Math.max(b,X(p));c=Math.min(c,Y(p));e=Math.max(e,Y(p));});
+    const bx=60, by=170, bw=W-120, bh=H-by-130;
+    const sc = Math.min(bw/Math.max(1,b-a), bh/Math.max(1,e-c));
+    const ox = bx + (bw-(b-a)*sc)/2, oy = by + (bh-(e-c)*sc)/2;
+    const PX = p=>ox+(X(p)-a)*sc, PY = p=>oy+(Y(p)-c)*sc;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    // obrys
+    g.strokeStyle = '#1b1b1f'; g.lineWidth = 16; g.beginPath();
+    d.pts.forEach((p,i)=>{ i?g.lineTo(PX(p),PY(p)):g.moveTo(PX(p),PY(p)); }); g.stroke();
+    for(let i=1;i<d.pts.length;i++){
+      const p=d.pts[i-1], q=d.pts[i], v=(p.v+q.v)/2;
+      let ratio = 0.7 + 0.15*(v/vmax), bd = 80;
+      d.corners.forEach(cn=>{ const dd=haversine(q.lat,q.lon,cn.lat,cn.lon); if(dd<bd){ bd=dd; ratio=v/Math.max(10,cn.safe); } });
+      g.strokeStyle = HEAT.color(ratio); g.lineWidth = 9;
+      g.beginPath(); g.moveTo(PX(p),PY(p)); g.lineTo(PX(q),PY(q)); g.stroke();
+    }
+    // start / meta
+    const s=d.pts[0], f=d.pts[d.pts.length-1];
+    g.fillStyle='#fff'; g.font='bold 18px Arial';
+    g.beginPath(); g.arc(PX(s),PY(s),9,0,7); g.fill(); g.fillText('START',PX(s)+12,PY(s)-10);
+    g.beginPath(); g.arc(PX(f),PY(f),9,0,7); g.fill(); g.fillText('META',PX(f)+12,PY(f)+22);
+    // pinezki zakretow
+    d.corners.forEach(cn=>{
+      const px = ox+(((cn.lon-lon0)*111320*kx)-a)*sc, py = oy+((-(cn.lat-lat0)*111320)-c)*sc;
+      const ok = cn.v!=null && cn.v<=cn.safe;
+      const col = cn.v==null ? '#888' : (ok ? '#39FF14' : '#FF1744');
+      g.fillStyle = '#000'; g.strokeStyle = col; g.lineWidth = 4;
+      g.beginPath(); g.arc(px,py,17,0,7); g.fill(); g.stroke();
+      g.fillStyle = col; g.font = 'bold 18px Arial'; g.textAlign = 'center'; g.fillText(String(cn.n),px,py+6);
+      const t = cn.v==null ? 'brak' : cn.v + ' km/h';
+      g.font = 'bold 17px Arial'; const tw = g.measureText(t).width + 12;
+      let tx = px + 22; if(tx + tw > W - 10) tx = px - 22 - tw;
+      g.fillStyle = '#000c'; g.fillRect(tx, py-12, tw, 24);
+      g.fillStyle = col; g.textAlign = 'left'; g.fillText(t, tx+6, py+6);
+    });
+    // legenda
+    const ly = H - 70;
+    for(let i=0;i<260;i++){ g.fillStyle = HEAT.color(0.8 + i/260*0.45); g.fillRect(30+i,ly,1,16); }
+    g.fillStyle = '#fff'; g.font = 'bold 16px Arial'; g.textAlign = 'left';
+    g.fillText('spokojnie', 30, ly+36); g.textAlign = 'right'; g.fillText('ostro', 290, ly+36);
+    g.textAlign = 'left'; g.fillStyle = '#9aa'; g.font = '15px Arial';
+    g.fillText('Pinezki: zielona = w normie, czerwona = za szybko (limit z marginesem -10 km/h)', 30, H-14);
+  },
+  save(){
+    const cv = document.getElementById('heat-cv'); if(!cv) return;
+    cv.toBlob(b=>{
+      if(!b) return;
+      const f = new File([b], 'mapa-ciepla.png', {type:'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[f]})){ navigator.share({files:[f], title:'Mapa ciepla BLACKLIST'}).catch(()=>{}); return; }
+      const u = URL.createObjectURL(b), a = document.createElement('a');
+      a.href = u; a.download = 'mapa-ciepla.png'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(u), 2000);
+    }, 'image/png');
+  },
+  clear(){ if(S.activeTrack && confirm('Usun\u0105\u0107 zapis przejazdu?')){ LS.s(HEAT.key(S.activeTrack.id), null); render(); } }
+};
+
+(function(){
+  const oStart = A.startTrackTracking, oStop = A.stopTrackTracking, oTr = V.tracks, oR = render;
+  A.startTrackTracking = function(){
+    oStart.call(A);
+    if(S.trackTimerState === 'waiting_start') HEAT.begin();
+  };
+  A.stopTrackTracking = function(){ HEAT.end(); oStop.call(A); };
+  V.tracks = function(){
+    let h = oTr();
+    if(!S.activeTrack) return h;
+    const d = HEAT.load(S.activeTrack.id);
+    return h + `
+    <div class="fr" style="--c:#FF5500">
+      <b style="color:#FF5500">\ud83d\uddfa\ufe0f MAPA CIEP\u0141A PO PRZEJE\u0179DZIE</b>
+      ${d ? `
+        <small>Zapis z ${new Date(d.ts).toLocaleString('pl-PL')}. Zielony = spokojnie, czerwony = ostro. Pinezki pokazuj\u0105 Twoj\u0105 pr\u0119dko\u015b\u0107 w zakr\u0119tach.</small>
+        <canvas id="heat-cv" style="width:100%;display:block;margin:8px 0;background:#000"></canvas>
+        <button class="btn on" onclick="HEAT.save()">\ud83d\udcf8 ZAPISZ / UDOST\u0118PNIJ OBRAZ</button>
+        <button class="btn red w" onclick="HEAT.clear()">\ud83d\uddd1 USU\u0143 ZAPIS PRZEJAZDU</button>
+      ` : `<small>Po uko\u0144czeniu przejazdu (ROZPOCZNIJ POMIAR do mety) pojawi si\u0119 tu trasa w kolorach z pinezkami zakr\u0119t\u00f3w i Twoj\u0105 pr\u0119dko\u015bci\u0105. B\u0119dzie gotowa do zrzutu ekranu.</small>`}
+    </div>`;
+  };
+  render = function(){ oR(); try{ HEAT.draw(); }catch(e){} };
+})();
+render();
