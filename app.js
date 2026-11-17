@@ -1346,3 +1346,18 @@ render();
   V.home=()=>oh().split('MAPA + PROWADZENIE').join('MAPA + PROWADZENIE (TORY AI)').replace(/TOR [^:<]*: MAPA/,'TOR AI: MAPA');
 })();
 render();
+
+/* DODATEK 5: ukrycie rankingu przejazdow w widoku AI TOR / TRASA (kod rankingu zostaje) */
+(function(){
+  const ot=V.tracks;
+  V.tracks=function(){
+    let h=ot();
+    const a=h.indexOf('<div class=fr style="--c:#FFD400;margin-top:16px">');
+    if(a<0) return h;
+    const m=h.indexOf('MAPA TORU AI');
+    let b=h.length;
+    if(m>a){ b=h.lastIndexOf('<div class=fr style="--c:#00F0FF">',m); }
+    return h.slice(0,a)+h.slice(b);
+  };
+})();
+render();
