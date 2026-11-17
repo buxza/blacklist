@@ -68,4 +68,18 @@ input.up{font:italic 800 17px sans-serif;text-transform:uppercase}
 .vid-box{background:#000;border:1px solid #333;margin:8px 0;position:relative;overflow:hidden}
 .vid-box video,.vid-box canvas{width:100%;max-height:320px;display:block;object-fit:cover;background:#000}
 .hud{font:700 12px monospace;color:#39FF14;background:#001a05;padding:8px;border:1px solid #39FF14;margin-top:6px}
-.foot-links{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:10px;border-top:1
+.foot-links{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:10px;border-top:1px solid #222}
+.foot-links button{background:none;border:0;font:700 11px sans-serif;cursor:pointer;padding:6px}
+.badge-adm{background:#FF1744;color:#fff;font:900 10px monospace;padding:2px 6px;margin-left:6px}
+/* Map styles */
+#map-container { width: 100%; height: 350px; margin: 10px 0; border: 2px solid #00F0FF; position: relative; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #fff; border: 1px solid #00F0FF; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
