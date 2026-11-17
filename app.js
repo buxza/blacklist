@@ -1227,3 +1227,107 @@ ${S.trk.corners.map(c=>`<div class="rl"><span>#${c.n} ${c.lvl}</span><em>R ${c.R
     `<button class="btn cy" onclick="A.go('tor')" style="color:#FFD400;box-shadow:inset 0 0 0 2px #FFD400">\ud83c\udfc1 TOR ${esc(S.trk.name)}: MAPA + PROWADZENIE<small>Dojazd do toru i g\u0142osowe wskaz\u00f3wki na zakr\u0119tach</small></button><div class=foot-links>`);
 })();
 render();
+
+
+/* ============================================================================
+   DODATEK 2: AI TOR / TRASA - MAPA DOJAZDU + GLOSOWE PROWADZENIE NA ZAKRETACH
+   (tylko dopisane, nic nie usunieto)
+   ============================================================================ */
+const AIG = {
+  corners: [], idx: 0, watch: null, on: false, spd: 0,
+  prep(t){
+    AIG.corners = TRK.analyze(t.geometry || []);
+    AIG.idx = 0;
+  },
+  bbox(t){
+    const g = t.geometry || [t.start, t.end];
+    let a=90,b=-90,c=180,d=-180;
+    g.forEach(p=>{a=Math.min(a,p.lat);b=Math.max(b,p.lat);c=Math.min(c,p.lon);d=Math.max(d,p.lon);});
+    const pl=(b-a)*0.1+0.002, po=(d-c)*0.1+0.002;
+    return [c-po,a-pl,d+po,b+pl];
+  },
+  mapUrl(t){
+    const bb = AIG.bbox(t);
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${bb.join(',')}&layer=mapnik&marker=${t.start.lat},${t.start.lon}`;
+  },
+  start(){
+    AIG.stop();
+    if(!S.activeTrack || !navigator.geolocation) return;
+    if(!AIG.corners.length) AIG.prep(S.activeTrack);
+    AIG.idx = 0; AIG.on = true;
+    AIG.corners.forEach(c=>{c.warn=false;});
+    TRK.say('Prowadzenie na torze w\u0142\u0105czone. Na trasie jest ' + AIG.corners.length + ' zakr\u0119t\u00f3w. Bezpiecznej jazdy.');
+    AIG.watch = navigator.geolocation.watchPosition(p=>{
+      if(S.trackTimerState !== 'running' && S.trackTimerState !== 'waiting_start'){ AIG.stop(); return; }
+      if(S.trackTimerState !== 'running') return;
+      const lat=p.coords.latitude, lon=p.coords.longitude;
+      AIG.spd = Math.round((p.coords.speed||0)*3.6);
+      const c = AIG.corners[AIG.idx];
+      if(!c){ return; }
+      const d = haversine(lat,lon,c.lat,c.lon);
+      const warnD = Math.max(80,(AIG.spd/3.6)*5);
+      if(d <= warnD && !c.warn){
+        c.warn = true;
+        const over = AIG.spd > c.safe ? ' Zwolnij.' : '';
+        TRK.say('Zakr\u0119t ' + c.n + ', ' + c.lvl + '. Bezpiecznie wejd\u017a przy ' + c.safe + ' kilometr\u00f3w na godzin\u0119.' + over);
+        vib(c.lvl==='bardzo ciasny'?[200,80,200]:100);
+      }
+      if(c.warn && d < 30){ AIG.idx++; }
+      const e = $('#aig-hud');
+      if(e){
+        const n = AIG.corners[AIG.idx];
+        e.innerHTML = '<b style="font-size:30px;color:#00F0FF">'+AIG.spd+' km/h</b><br>' + (n ? 'Nast\u0119pny: zakr\u0119t <b>'+n.n+'</b> ('+n.lvl+') za <b>'+Math.round(haversine(lat,lon,n.lat,n.lon))+' m</b><br>Bezpiecznie: <b style="color:'+(AIG.spd>n.safe?'#FF1744':'#39FF14')+'">'+n.safe+' km/h</b>' : 'To by\u0142y wszystkie zakr\u0119ty.');
+      }
+    },()=>{},{enableHighAccuracy:true,maximumAge:500,timeout:8000});
+  },
+  stop(){
+    if(AIG.watch!=null){ try{navigator.geolocation.clearWatch(AIG.watch);}catch(e){} AIG.watch=null; }
+    AIG.on=false;
+  }
+};
+
+(function(){
+  const oSel = A.selectTrack, oStart = A.startTrackTracking, oStop = A.stopTrackTracking, oTr = V.tracks;
+  A.selectTrack = function(id){
+    oSel.call(A,id);
+    if(S.activeTrack){ AIG.prep(S.activeTrack); render(); }
+  };
+  A.startTrackTracking = function(){
+    oStart.call(A);
+    if(S.trackTimerState === 'waiting_start') AIG.start();
+  };
+  A.stopTrackTracking = function(){ AIG.stop(); oStop.call(A); };
+  V.tracks = function(){
+    let h = oTr();
+    const t = S.activeTrack;
+    if(!t) return h;
+    const extra = `
+    <div class=fr style="--c:#00F0FF">
+      <b style="color:#00F0FF">\ud83d\uddfa\ufe0f MAPA TORU AI</b>
+      <small>Pinezka = start trasy. Dojazd: przycisk poni\u017cej.</small>
+      <div class="vid-box"><iframe src="${AIG.mapUrl(t)}" style="width:100%;height:260px;border:0"></iframe></div>
+      <button class="btn on" onclick="A.openMaps(${t.start.lat},${t.start.lon})">\ud83e\udded NAWIGUJ DO STARTU (GOOGLE MAPS)</button>
+      <button class="btn cy" onclick="window.open('https://waze.com/ul?ll=${t.start.lat},${t.start.lon}&navigate=yes','_blank')">\ud83d\ude97 NAWIGUJ (WAZE)</button>
+    </div>
+    <div class="fr ai">
+      <b style="color:#39FF14">\ud83c\udf99\ufe0f PROWADZENIE G\u0141OSOWE NA TORZE</b>
+      <small>Zakr\u0119ty na trasie: <b>${AIG.corners.length}</b>. G\u0142os podaje bezpieczn\u0105 pr\u0119dko\u015b\u0107 wej\u015bcia (obliczon\u0105 z promienia zakr\u0119tu, minus ${S.trkMargin} km/h). Prowadzenie w\u0142\u0105cza si\u0119 razem z przyciskiem \u201eROZPOCZNIJ POMIAR\u201d.</small>
+      <div id="aig-hud" class="hud">${AIG.on?'Czekam na start...':'Gotowy.'}</div>
+      ${AIG.corners.map(c=>`<div class="rl"><span>#${c.n} ${c.lvl}</span><em>R ${c.R} m \u2192 <span style="color:#39FF14">${c.safe} km/h</span></em></div>`).join('')}
+      <button class="btn w" onclick="TRK.say('Test g\u0142osu. Zakr\u0119t 1, ciasny. Bezpiecznie wejd\u017a przy 50 kilometr\u00f3w na godzin\u0119.')">\ud83d\udd0a TEST G\u0141OSU</button>
+      <button class="btn w" onclick="TRK.toggleVoice()">G\u0141OS: ${S.trkVoice?'W\u0141.':'WY\u0141.'}</button>
+      <small>Przyczepno\u015b\u0107 (g): <b>${S.trkG.toFixed(2)}</b> (0.4 deszcz, 0.6 zwyk\u0142e opony)</small>
+      <input type="range" min="0.3" max="1.1" step="0.05" value="${S.trkG}" onchange="TRK.setG(this.value);AIG.prep(S.activeTrack);render()">
+    </div>`;
+    return h + extra;
+  };
+})();
+render();
+
+/* DODATEK 3: przycisk toru na ekranie glownym (home) */
+(function(){
+  const oh=V.home;
+  V.home=()=>oh().replace('<div class=foot-links>',
+    '<button class="btn cy" onclick="A.go(\'tor\')" style="color:#FFD400;box-shadow:inset 0 0 0 2px #FFD400">\ud83c\udfc1 TOR '+esc(S.trk.name)+': MAPA + PROWADZENIE<small>Dojazd do toru i g\u0142osowe wskaz\u00f3wki na zak\u0119tach</small></button><div class=foot-links>');
+})();
+render();
